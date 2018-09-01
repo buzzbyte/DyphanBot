@@ -1,6 +1,8 @@
 import logging
 import random
 
+import discord
+
 OMAEWAMOUSHINDEIRU = [
     "おまえはもうしんでいる",
     "おまえはもう死んでいる",
@@ -33,6 +35,10 @@ class TestPlugin(object):
         else:
             await client.send_message(message.channel, "Tested!!")
 
+    async def anime(self, client, message, args):
+        await client.change_presence(game=discord.Game(name="anime", type=3), status=discord.Status.dnd)
+        await client.send_message(message.channel, "Imma watch some anime... ~~brb~~ but I'll still be here. I can multitask... literally.")
+
     async def handle_message(self, client, message):
         if "Dyphan" in message.content:
             await client.send_message(message.channel, "sup bitch")
@@ -42,11 +48,12 @@ class TestPlugin(object):
     async def handle_raw_message(self, client, message):
         if "Dyphan likes it raw" in message.content:
             await client.send_message(message.channel, "I LIKE IT RAWW!!!!")
-        elif any(bgrill in message.content for bgrill in BESTGIRL):
+        elif any(bgrill in message.content.lower() for bgrill in BESTGIRL):
             await client.send_message(message.channel, ":heart:")
 
 def plugin_init(dyphanbot):
     testplugin = TestPlugin(dyphanbot)
     dyphanbot.add_command_handler("test", testplugin.test)
+    dyphanbot.add_command_handler("anime", testplugin.anime)
     dyphanbot.add_message_handler(testplugin.handle_message)
     dyphanbot.add_message_handler(testplugin.handle_raw_message, raw=True)

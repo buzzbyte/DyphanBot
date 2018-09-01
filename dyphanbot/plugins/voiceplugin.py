@@ -44,11 +44,13 @@ class VoiceState(object):
 
     async def create_player(self, song):
         opts = { 'default_search': 'auto', "ignoreerrors": True }
+        #delay_opt = " -ss -3" # Delays audio by 3 seconds to minimize lag for streamed videos
+        delay_opt = ""
         return await self.voice_client.create_ytdl_player(
             song.strip(),
             ytdl_options=opts,
             after=self.trigger_next,
-            before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+            before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5" + delay_opt,
         )
 
     """Audio player loop"""
