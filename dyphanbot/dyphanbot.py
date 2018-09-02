@@ -7,8 +7,8 @@ import discord
 import dyphanbot.utils as utils
 from dyphanbot.pluginloader import PluginLoader
 
-CONFIG_FN = "testee_token.json"
-#CONFIG_FN = "dyphan_token.json"
+#CONFIG_FN = "testee_token.json"
+CONFIG_FN = "dyphan_token.json"
 
 # Configure the logging module
 logging.basicConfig(
