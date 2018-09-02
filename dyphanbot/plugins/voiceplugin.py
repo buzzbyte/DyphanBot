@@ -142,7 +142,7 @@ class VoiceState(object):
     def get_embed(self):
         embed = discord.Embed(
             title=self.player.title,
-            colour=discord.Colour(0xff0000),
+            colour=discord.Colour(0x7289DA),
             url=self.player.url,
             description=textwrap.shorten(self.player.description, 157, placeholder="..."),
             timestamp=self.current.message.timestamp
