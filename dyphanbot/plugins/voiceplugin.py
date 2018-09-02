@@ -1,19 +1,29 @@
 import logging
 import random
 import asyncio
+import functools
+import datetime
+import textwrap
 import discord
+import youtube_dl
+
+import dyphanbot.utils as utils
+
+NOW_PLAYING_FMT = "**Now Playing:** {0}"
+NOW_STREAMING_FMT = "**Now Streaming:** {0}"
 
 class SongRequest(object):
     """docstring for SongRequest."""
     def __init__(self, message, player):
         self.player = player
+        self.message = message
         self.channel = message.channel
         self.requester = message.author
 
     def __str__(self):
-        fmt = "*{0.title}*{2}\nUploaded by *{0.uploader}* and requested by *{1.display_name}*"
+        fmt = "*{0.title}*{2}\nUploaded by *{0.uploader}* and requested by *{1.display_name}*\n{0.url}"
         duration = self.player.duration
-        audiolength = " [length: {0[0]}:{0[1]}]".format(divmod(duration, 60)) if duration else ""
+        audiolength = " [length: {0[0]}:{0[1]:02}]".format(divmod(duration, 60)) if duration else ""
         return fmt.format(self.player, self.requester, audiolength)
 
 class VoiceState(object):
@@ -42,16 +52,116 @@ class VoiceState(object):
     def trigger_next(self):
         self.client.loop.call_soon_threadsafe(self.play_next.set)
 
-    async def create_player(self, song):
+    async def _ytdl_player(self, req, message, *, ytdl_options=None, silent=False, **kwargs):
+        """Custom version of VoiceClient.create_ytdl_player()"""
+        opts = { 'format': 'webm[abr>0]/bestaudio/best', 'prefer_ffmpeg': True }
+        if ytdl_options is not None and isinstance(ytdl_options, dict):
+            opts.update(ytdl_options)
+
+        entries = []
+        ret_player = None
+        ydl = youtube_dl.YoutubeDL(opts)
+        adding_msg = await self.client.send_message(message.channel, "Fetching requested song(s)....")
+        func = functools.partial(ydl.extract_info, req, download=False)
+        info = await self.voice_client.loop.run_in_executor(None, func)
+        if "entries" in info:
+            for entry in info['entries']:
+                entries.append(entry)
+        else:
+            entries = [info]
+
+        if not silent:
+            mtext = "Adding songs to playlist queue..." if len(entries) > 1 else "Added *{0}* to the playlist queue.".format(entries[0].get("title"))
+            await self.client.edit_message(adding_msg, mtext)
+
+        for entry in entries:
+            if entry is None:
+                continue
+            download_url = entry.get('url')
+            player = self.voice_client.create_ffmpeg_player(download_url, **kwargs)
+            player.yt = ydl
+            player.download_url = download_url
+            player.url = entry.get('webpage_url')
+            player.views = entry.get('view_count')
+            player.is_live = bool(entry.get('is_live'))
+            player.likes = entry.get('like_count')
+            player.dislikes = entry.get('dislike_count')
+            player.duration = entry.get('duration')
+            player.uploader = entry.get('uploader')
+            player.thumbnail = entry.get('thumbnail')
+            player.in_playlist = True if len(entries) > 1 else False
+
+            is_twitch = 'twitch' in req
+            if is_twitch:
+                # twitch has 'title' and 'description' sort of mixed up.
+                player.title = entry.get('description')
+                player.description = None
+            else:
+                player.title = entry.get('title')
+                player.description = entry.get('description')
+
+            player.pltitle = entry.get('playlist_title') if len(entries) > 1 else player.title
+
+            # upload date handling
+            date = entry.get('upload_date')
+            if date:
+                try:
+                    date = datetime.datetime.strptime(date, '%Y%M%d').date()
+                except ValueError:
+                    date = None
+
+            player.upload_date = date
+
+            if not ret_player:
+                ret_player = player
+
+            await self.playlist.put(SongRequest(message, player))
+            if len(entries) > 1 and not silent:
+                mtext += "\n    **+** *{0}*".format(player.title)
+                await self.client.edit_message(adding_msg, mtext)
+
+        if len(entries) > 1 and not silent:
+            mtext += "\nAdded all playlist items to the queue."
+            await self.client.edit_message(adding_msg, mtext)
+
+        return ret_player
+
+
+    async def create_player(self, song, message):
         opts = { 'default_search': 'auto', "ignoreerrors": True }
         #delay_opt = " -ss -3" # Delays audio by 3 seconds to minimize lag for streamed videos
         delay_opt = ""
-        return await self.voice_client.create_ytdl_player(
+        return await self._ytdl_player(
             song.strip(),
+            message=message,
             ytdl_options=opts,
             after=self.trigger_next,
             before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5" + delay_opt,
         )
+
+    def get_embed(self):
+        embed = discord.Embed(
+            title=self.player.title,
+            colour=discord.Colour(0xff0000),
+            url=self.player.url,
+            description=textwrap.shorten(self.player.description, 157, placeholder="..."),
+            timestamp=self.current.message.timestamp
+        )
+
+        embed.set_image(url=self.player.thumbnail)
+        embed.set_author(name=("Now Streaming" if self.player.is_live else "Now Playing") if self.is_playing() else "Paused",
+            url="https://github.com/buzzbyte/DyphanBot",
+            icon_url=utils.get_user_avatar_url(self.current.message.server.me)
+        )
+
+        embed.set_footer(text="Requested by: {0.display_name}".format(self.current.requester), icon_url=utils.get_user_avatar_url(self.current.requester))
+        embed.add_field(name="Uploaded by", value=self.player.uploader, inline=True)
+
+        duration = self.player.duration
+        if duration:
+            embed.add_field(name="Duration", value="{0[0]}:{0[1]:02}".format(divmod(duration, 60)), inline=True)
+
+        return embed
 
     """Audio player loop"""
     async def audio_player_task(self):
@@ -60,7 +170,7 @@ class VoiceState(object):
             logging.info("player task loop start")
             self.play_next.clear()
             self.current = await self.playlist.get()
-            await self.client.send_message(self.current.channel, "**Now Playing:** {0}".format(self.current))
+            await self.client.send_message(self.current.channel, embed=self.get_embed())
             self.current.player.start()
             logging.info("player task loop end")
             await self.play_next.wait()
@@ -139,14 +249,14 @@ class VoicePlugin(object):
             return
 
         try:
-            player = await state.create_player(song)
+            await state.create_player(song, message)
         except Exception as e:
             fmt = 'An error occurred while processing this request: ```py\n{}: {}\n```'
             await client.send_message(message.channel, fmt.format(type(e).__name__, e))
         else:
-            entry = SongRequest(message, player)
-            await state.playlist.put(entry)
-            await client.send_message(message.channel, "Added *{0}* to the playlist queue.".format(player.title))
+            if state.current and state.player.is_live:
+                await client.send_message(message.channel, "Current live stream will be skipped.")
+                state.skip()
 
     async def playlist(self, client, message, args):
         argstr = " ".join(args)
@@ -167,15 +277,13 @@ class VoicePlugin(object):
         message = await client.send_message(message.channel, mtext)
         for song in songlist:
             try:
-                player = await state.create_player(song)
+                player = await state.create_player(song, message)
             except Exception as e:
                 fmt = 'An error occurred while processing song `{0}`: ```py\n{1}: {2}\n```'
                 await client.send_message(message.channel, fmt.format(song, type(e).__name__, e))
                 continue
             else:
-                entry = SongRequest(message, player)
-                await state.playlist.put(entry)
-                mtext += "\n    **+** *{0}*".format(player.title)
+                mtext += "\n    **+** *{0}*".format(player.pltitle)
                 await client.edit_message(message, mtext)
 
         mtext += "\nAdded all requested songs to playlist."
@@ -214,7 +322,7 @@ class VoicePlugin(object):
         if state.current is None:
             await client.send_message(message.channel, "Nothing's playing.")
         else:
-            await client.send_message(message.channel, "**Now {0}:** {1}".format("Playing" if state.is_playing() else "Paused", state.current))
+            await client.send_message(message.channel, embed=state.get_embed())
 
     async def leave(self, client, message, args):
         state = self.get_voice_state(client, message.server)

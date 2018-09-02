@@ -4,9 +4,11 @@ import random
 import logging
 import discord
 
+import dyphanbot.utils as utils
 from dyphanbot.pluginloader import PluginLoader
 
-CONFIG_FN = "dyphan_token.json"
+CONFIG_FN = "testee_token.json"
+#CONFIG_FN = "dyphan_token.json"
 
 # Configure the logging module
 logging.basicConfig(
@@ -50,8 +52,13 @@ class DyphanBot(object):
         self.msg_handlers.append(handler)
 
     def bot_mention(self, msg):
+        """Returns a mention string for the bot"""
         server = msg.server
         return '{0.mention}'.format(server.me if server is not None else self.client.user)
+
+    def get_avatar_url(self):
+        """Returns a URL for the bot's avatar"""
+        return utils.get_user_avatar_url(self.client.user)
 
     def on_ready(self):
         print("Initializing {0} ({1}) running DyphanBot".format(self.client.user.name, self.client.user.id))
