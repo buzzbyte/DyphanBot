@@ -98,9 +98,9 @@ class VoiceState(object):
                 player.description = None
             else:
                 player.title = entry.get('title')
-                player.description = entry.get('description')
+                player.description = entry.get('description') or "*No description available*"
 
-            player.pltitle = entry.get('playlist_title') if len(entries) > 1 else player.title
+            player.pltitle = (entry.get('playlist_title') or player.title) if len(entries) > 1 else player.title
 
             # upload date handling
             date = entry.get('upload_date')
@@ -148,18 +148,20 @@ class VoiceState(object):
             timestamp=self.current.message.timestamp
         )
 
-        embed.set_image(url=self.player.thumbnail)
+        if self.player.thumbnail:
+            embed.set_thumbnail(url=self.player.thumbnail)
         embed.set_author(name=("Now Streaming" if self.player.is_live else "Now Playing") if self.is_playing() else "Paused",
             url="https://github.com/buzzbyte/DyphanBot",
             icon_url=utils.get_user_avatar_url(self.current.message.server.me)
         )
 
         embed.set_footer(text="Requested by: {0.display_name}".format(self.current.requester), icon_url=utils.get_user_avatar_url(self.current.requester))
-        embed.add_field(name="Uploaded by", value=self.player.uploader, inline=True)
+        if self.player.uploader:
+            embed.add_field(name="Uploaded by", value=self.player.uploader, inline=True)
 
         duration = self.player.duration
         if duration:
-            embed.add_field(name="Duration", value="{0[0]}:{0[1]:02}".format(divmod(duration, 60)), inline=True)
+            embed.add_field(name="Duration", value="{0[0]}:{0[1]:02}".format(divmod(int(duration), 60)), inline=True)
 
         return embed
 
@@ -197,6 +199,8 @@ class VoicePlugin(object):
         if len(args) > 0:
             if args[0].strip() == "join":
                 await self.join(client, message, args[1:])
+            elif args[0].strip() == "file":
+                await self.file(client, message, args[1:])
             elif args[0].strip() == "play":
                 await self.play(client, message, args[1:])
             elif args[0].strip() == "playlist":
@@ -231,6 +235,28 @@ class VoicePlugin(object):
             await state.voice_client.move_to(v_chat)
 
         return True
+
+    async def file(self, client, message, args):
+        if not message.attachments:
+            await client.send_message(message.channel, "You didn't attach a file, dude...")
+            return
+
+        state = self.get_voice_state(client, message.server)
+        if state.voice_client is None:
+            joined = await self.join(client, message, [])
+            if not joined:
+                return
+
+        for attachment in message.attachments:
+            try:
+                await state.create_player(attachment["url"], message)
+            except Exception as e:
+                fmt = 'An error occurred while processing this request: ```py\n{}: {}\n```'
+                await client.send_message(message.channel, fmt.format(type(e).__name__, e))
+            else:
+                if state.current and state.player.is_live:
+                    await client.send_message(message.channel, "Current live stream will be skipped.")
+                    state.skip()
 
     async def play(self, client, message, args):
         song = " ".join(args)
@@ -274,7 +300,7 @@ class VoicePlugin(object):
                 return
 
         mtext = "Adding songs to playlist..."
-        message = await client.send_message(message.channel, mtext)
+        adding_msg = await client.send_message(message.channel, mtext)
         for song in songlist:
             try:
                 player = await state.create_player(song, message)
@@ -284,10 +310,10 @@ class VoicePlugin(object):
                 continue
             else:
                 mtext += "\n    **+** *{0}*".format(player.pltitle)
-                await client.edit_message(message, mtext)
+                await client.edit_message(adding_msg, mtext)
 
         mtext += "\nAdded all requested songs to playlist."
-        await client.edit_message(message, mtext)
+        await client.edit_message(adding_msg, mtext)
 
     async def pause(self, client, message, args):
         state = self.get_voice_state(client, message.server)
