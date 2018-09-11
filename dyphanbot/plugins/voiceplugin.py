@@ -1,3 +1,7 @@
+####################################
+# TODO: Rewrite this whole thing!! #
+####################################
+
 import logging
 import random
 import asyncio
@@ -363,5 +367,6 @@ class VoicePlugin(object):
             pass
 
 def plugin_init(dyphanbot):
-    voiceplugin = VoicePlugin(dyphanbot)
-    dyphanbot.add_command_handler("voice", voiceplugin.voice)
+    #voiceplugin = VoicePlugin(dyphanbot)
+    #dyphanbot.add_command_handler("voice", voiceplugin.voice)
+    pass

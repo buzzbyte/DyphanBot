@@ -1,7 +1,7 @@
 import os
 
 # Codebase info
-CB_NAME = "DyphanBot"
+CB_NAME = "DyphanBot@rewrite"
 
 # Root directory
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))

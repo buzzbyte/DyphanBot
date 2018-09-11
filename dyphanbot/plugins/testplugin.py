@@ -31,28 +31,39 @@ class TestPlugin(object):
 
     async def test(self, client, message, args):
         if 'self' in args:
-            await client.send_message(message.channel, self.dyphanbot.bot_mention(message) + " test")
+            await message.channel.send(self.dyphanbot.bot_mention(message) + " test")
         else:
-            await client.send_message(message.channel, "Tested!!")
+            await message.channel.send("Tested!!")
 
-    async def anime(self, client, message, args):
-        await client.change_presence(game=discord.Game(name="anime", type=3), status=discord.Status.dnd)
-        await client.send_message(message.channel, "Imma watch some anime... ~~brb~~ but I'll still be here. I can multitask... literally.")
+    async def anime(self, client, message=None, args=None):
+        # TODO: Make this run automatically instead of on command.
+        # TODO: Maybe randomly choose from a list of anime to watch from as an easter egg?
+        activity = discord.Activity(
+            name="anime",
+            state="Watching an anime episode",
+            details="It's a very exciting anime!",
+            type=discord.ActivityType.watching
+        )
+        await client.change_presence(activity=activity, status=discord.Status.dnd)
+        if message:
+            await message.channel.send("Imma watch some anime... ~~brb~~ but I'll still be here. I can multitask... literally.")
 
     async def handle_message(self, client, message):
         if "Dyphan" in message.content:
-            await client.send_message(message.channel, "sup bitch")
+            await message.channel.send("sup bitch")
         elif any(omaeshin in message.content for omaeshin in OMAEWAMOUSHINDEIRU):
-            await client.send_message(message.channel, random.choice(NANI))
+            await message.channel.send(random.choice(NANI))
 
     async def handle_raw_message(self, client, message):
         if "Dyphan likes it raw" in message.content:
-            await client.send_message(message.channel, "I LIKE IT RAWW!!!!")
+            await message.channel.send("I LIKE IT RAWW!!!!")
         elif any(bgrill in message.content.lower() for bgrill in BESTGIRL):
-            await client.send_message(message.channel, ":heart:")
+            await message.channel.send(":heart:")
 
 def plugin_init(dyphanbot):
     testplugin = TestPlugin(dyphanbot)
+    dyphanbot.add_ready_handler(testplugin.anime)
+
     dyphanbot.add_command_handler("test", testplugin.test)
     dyphanbot.add_command_handler("anime", testplugin.anime)
     dyphanbot.add_message_handler(testplugin.handle_message)

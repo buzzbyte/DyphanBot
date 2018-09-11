@@ -5,7 +5,7 @@ from dyphanbot.dyphanbot import DyphanBot
 
 def main():
     dyphanbot = DyphanBot()
-    dyphanbot.start()
+    dyphanbot.run()
 
 if __name__ == '__main__':
     main()
