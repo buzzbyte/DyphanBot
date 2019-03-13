@@ -1,5 +1,8 @@
 import logging
 import random
+import uuid
+import json
+import os
 
 import discord
 
@@ -28,6 +31,8 @@ class TestPlugin(object):
     """docstring for TestPlugin."""
     def __init__(self, dyphanbot):
         self.dyphanbot = dyphanbot
+        self.ai_session_id = None
+        self.ai_project_id = "dyphanai" # TODO: move to config
 
     async def test(self, client, message, args):
         if 'self' in args:
@@ -48,6 +53,37 @@ class TestPlugin(object):
         if message:
             await message.channel.send("Imma watch some anime... ~~brb~~ but I'll still be here. I can multitask... literally.")
 
+    async def ai(self, client, message):
+        #text = " ".join(args)
+        text = message.content
+        if not self.ai_session_id:
+            self.ai_session_id = str(uuid.uuid4())
+
+        async with message.channel.typing():
+            import dialogflow_v2 as dialogflow
+            session_client = dialogflow.SessionsClient()
+
+            session = session_client.session_path(self.ai_project_id, self.ai_session_id)
+            print('Session path: {}\n'.format(session))
+            text_input = dialogflow.types.TextInput(
+                text=text,
+                language_code="en-US"
+            )
+
+            query_input = dialogflow.types.QueryInput(text=text_input)
+            response = session_client.detect_intent(
+                session=session,
+                query_input=query_input
+            )
+            print('Query text: {}'.format(response.query_result.query_text))
+            print('Detected intent: {} (confidence: {})\n'.format(
+                response.query_result.intent.display_name,
+                response.query_result.intent_detection_confidence
+            ))
+            print('Fulfillment text: {}\n'.format(response.query_result.fulfillment_text))
+            await message.channel.send("{}".format(response.query_result.fulfillment_text))
+
+
     async def handle_message(self, client, message):
         if "Dyphan" in message.content:
             await message.channel.send("sup bitch")
@@ -66,5 +102,6 @@ def plugin_init(dyphanbot):
 
     dyphanbot.add_command_handler("test", testplugin.test)
     dyphanbot.add_command_handler("anime", testplugin.anime)
+    dyphanbot.add_command_handler("/unknown_cmd/", testplugin.ai)
     dyphanbot.add_message_handler(testplugin.handle_message)
     dyphanbot.add_message_handler(testplugin.handle_raw_message, raw=True)

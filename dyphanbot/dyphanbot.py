@@ -70,8 +70,11 @@ class DyphanBot(discord.Client):
             args = cmd[1:]
             self.logger.info("Got command `%s` with args `%s`", cmd[0], ' '.join(args))
             for key in self.commands:
-                if key == cmd[0]:
+                if key == cmd[0] and not key == "/unknown_cmd/":
                     await self.commands[key](self, message, args)
+                    return
+            if "/unknown_cmd/" in self.commands:
+                await self.commands["/unknown_cmd/"](self, message)
         for handler in self.msg_handlers:
             if handler.raw or (not handler.raw and self.bot_mention(message) in message.content):
                 await handler(self, message)
