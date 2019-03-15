@@ -17,7 +17,7 @@ Currently reads the token from `~/testee_token.json`. File name and location
 - [ ] Write a good "API" layer for plugins to use.
 - [ ] Implement basic voice functionality that multiple plugins can use.
 - [ ] Implement saving data.
-- [ ] Rewrite the voice plugin.
+- [x] Rewrite the voice plugin.
 - [ ] Make use of an actual configuration file.
 - [ ] Possibly make a runtime patch to discord.py to implement voice receive
     (until it's officially available).
