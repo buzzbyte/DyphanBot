@@ -7,7 +7,7 @@ from pprint import pprint
 import discord
 
 class Echo(object):
-    """docstring for Echo."""
+    """ Echo and Emoji plugin """
     def __init__(self, dyphanbot):
         self.dyphanbot = dyphanbot
 

@@ -1,32 +1,36 @@
 """ DyphanBot Per-Server Extensions implementation """
 import os
 import json
+import traceback
 import posixpath
-import requests
 from pprint import pprint
-from dyphanbot.constants import DEFAULT_DATA_DIR
 
-DB_FILENAME = os.path.join(DEFAULT_DATA_DIR, "extensions.json")
+import requests
+import discord
 
 class ExtensionLoader(object):
-    """docstring for ExtensionLoader."""
+    """ Handles per-server extension loading """
     def __init__(self, dyphanbot):
         self.dyphanbot = dyphanbot
-        self.initial_data = {}
+        self.db_filename = "extensions.json"
         self.db = self.load_db()
 
     def save_db(self, data):
-        with open(DB_FILENAME, 'w') as fd:
-            json.dump(data, fd)
+        return self.dyphanbot.data.save_json(self.db_filename, data)
 
     def load_db(self):
-        try:
-            with open(DB_FILENAME, 'r') as fd:
-                returned = json.load(fd)
-                #pprint(fd.read())
-            return returned
-        except (OSError, IOError) as e:
-            return self.save_db(self.initial_data)
+        return self.dyphanbot.data.load_json(self.db_filename)
+
+    def parse_output(self, output):
+        """ Parses JSON output to `send()` parameters. """
+        return {
+            "content": (output['text'] if 'text' in output else None),
+            "embed": (discord.Embed.from_dict(output['embed']) if 'embed' in output else None),
+            "tts": (output['tts'] if 'tts' in output else False),
+            "files": (output['files'] if 'files' in output else None),
+            "file": None, # Only allow list of files to prevent exceptions
+            "delete_after": (output['delete_after'] if 'delete_after' in output else None)
+        }
 
     def verify(self, url):
         if not url.startswith("https"):
@@ -85,11 +89,12 @@ class ExtensionLoader(object):
             r.raise_for_status()
             res = r.json()
             if res["status"] == "failure":
-                return "Failed: %s" % res["error"]
+                return { "content": ("Failed: %s" % res["error"]) }
             if "dyphan-output" in res:
-                return res["dyphan-output"]["text"]
+                return self.parse_output(res["dyphan-output"])
         except Exception as e:
-            return "Whoops! Something went wrong... ```py\n{}: {}\n```".format(type(e).__name__, e)
+            traceback.print_exc()
+            return { "content": "Whoops! Something went wrong... ```py\n{}: {}\n```".format(type(e).__name__, e) }
 
     def list(self, guild):
         guild_id = str(guild.id)
@@ -103,7 +108,7 @@ class ExtensionLoader(object):
         return returned
 
 class ELHandlers(object):
-    """docstring for ELHandlers."""
+    """ Command handlers for extensions """
     def __init__(self, dyphanbot):
         self.dyphanbot = dyphanbot
         self.extloader = ExtensionLoader(dyphanbot)
@@ -121,7 +126,7 @@ class ELHandlers(object):
         #ext_args = args[1:]
         mentionless = message.content.replace(self.dyphanbot.bot_mention(message), "", 1).strip()
         ext_args = mentionless.partition(cmd)[2].strip()
-        await message.channel.send(self.extloader.call(message, cmd, ext_args))
+        await message.channel.send(**self.extloader.call(message, cmd, ext_args))
 
     async def help(self, client, message, args):
         if len(args) < 1:

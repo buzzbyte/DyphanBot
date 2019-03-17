@@ -16,14 +16,16 @@ class PluginLoader(object):
 
     """
 
-    def __init__(self, dyphanbot):
+    def __init__(self, dyphanbot, disabled_plugins=[], user_plugin_dirs=[]):
         self.logger = logging.getLogger(__name__)
         self.dyphanbot = dyphanbot
+        self.disabled_plugins = disabled_plugins
+        self.plugin_dirs = PLUGIN_DIRS + [os.path.expanduser(pdirs) for pdirs in user_plugin_dirs]
         self.plugins = {}
 
     def load_plugins(self):
         """ Loads and initializes each plugin in the plugin directories. """
-        for directory in PLUGIN_DIRS:
+        for directory in self.plugin_dirs:
             if not os.path.isdir(directory):
                 continue
 
@@ -48,6 +50,9 @@ class PluginLoader(object):
 
         """
         name = os.path.splitext(os.path.basename(path))[0]
+        if name in self.disabled_plugins:
+            self.logger.info("Skipped disabled plugin: %s", name)
+            return
         try:
             plugin = import_file(path)
             if getattr(plugin, "plugin_init", None):

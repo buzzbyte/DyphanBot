@@ -6,10 +6,8 @@ import discord
 
 import dyphanbot.utils as utils
 from dyphanbot.constants import CB_NAME
+from dyphanbot.datamanager import DataManager
 from dyphanbot.pluginloader import PluginLoader
-
-CONFIG_FN = "testee_token.json"
-#CONFIG_FN = "dyphan_token.json"
 
 # Configure the logging module
 logging.basicConfig(
@@ -23,8 +21,10 @@ class DyphanBot(discord.Client):
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger(__name__)
-        self.token = self.load_config()["token"]
-        self.pluginloader = PluginLoader(self)
+        self.data = DataManager(self)
+        self.pluginloader = PluginLoader(self,
+            disabled_plugins=self.data._get_key('disabled_plugins', []),
+            user_plugin_dirs=self.data._get_key('plugin_dirs', []))
 
         self.commands = {}
         self.msg_handlers = []
@@ -32,12 +32,7 @@ class DyphanBot(discord.Client):
 
     def run(self):
         self.pluginloader.load_plugins()
-        super().run(self.token)
-
-    def load_config(self):
-        configfilepath = os.path.join(os.path.expanduser('~'), CONFIG_FN)
-        with open(configfilepath) as fd:
-            return json.load(fd)
+        super().run(self.data._get_key('token'))
 
     def add_command_handler(self, command, handler):
         self.commands[command] = handler;
