@@ -15,9 +15,9 @@ directories. Once it finds the file, it will assign the location it first found
 it in as the default data directory.
 
 Currently, there are three implemented configuration settings:
-    * `token`: The Discord API token required for DyphanBot to run.
-    * `disabled_plugins`: The list of plugins that should be disabled.
-    * `plugin_dirs`: Additional plugin directories DyphanBot can look in.
+- `token`: The Discord API token required for DyphanBot to run.
+- `disabled_plugins`: The list of plugins that should be disabled.
+- `plugin_dirs`: Additional plugin directories DyphanBot can look in.
 
 ## TODO
 - [ ] Revise the way handlers are handled.
