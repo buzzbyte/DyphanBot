@@ -8,6 +8,16 @@ from pprint import pprint
 import requests
 import discord
 
+import dyphanbot.utils as utils
+
+HELP_MSG = """
+**Extensions Help**
+`{0}add <url>`: Registers an extension to this server.
+`{0}list`: Lists extensions registered on this server.
+`{0}help [extension_command]`: Displays extension help text.
+`{0}<extension_command>`: Calls an extension.
+"""
+
 class ExtensionLoader(object):
     """ Handles per-server extension loading """
     def __init__(self, dyphanbot):
@@ -46,7 +56,7 @@ class ExtensionLoader(object):
             if not any(x in manifest['dyphan-extension'] for x in required_keys):
                 return False
             return manifest['dyphan-extension']
-        except Exception as e:
+        except Exception:
             return False
 
     def register(self, guild, url):
@@ -82,7 +92,7 @@ class ExtensionLoader(object):
     def call(self, message, cmd, args):
         ext = self.find(message.guild, cmd)
         if not ext:
-            return "Extension not found on this server."
+            return { "content": "Extension not found on this server." }
         req_url = ext['url-format'].format(args, message=message)
         try:
             r = requests.get(req_url)
@@ -112,16 +122,18 @@ class ELHandlers(object):
     def __init__(self, dyphanbot):
         self.dyphanbot = dyphanbot
         self.extloader = ExtensionLoader(dyphanbot)
+        self.reserved_cmds = [ "add", "help", "list" ]
+        self.ext_prefix = '+'
 
     async def add(self, client, message, args):
         if len(args) < 1:
-            return await message.channel.send("Bruh.. What extension? `Usage: @Dyphan add-ext <url>`")
+            return await message.channel.send("Bruh.. What extension? `Usage: @Dyphan {0}add <url>`".format(self.ext_prefix))
         url = args[0]
         await message.channel.send(self.extloader.register(message.guild, url))
 
     async def call(self, client, message, args):
         if len(args) < 1:
-            return await message.channel.send("Bruh.. What extension? `Usage: @Dyphan ext <command> [args]`")
+            return await message.channel.send("Bruh.. What extension? `Usage: @Dyphan {0}<command> [args]`".format(self.ext_prefix))
         cmd = args[0]
         #ext_args = args[1:]
         mentionless = message.content.replace(self.dyphanbot.bot_mention(message), "", 1).strip()
@@ -130,11 +142,11 @@ class ELHandlers(object):
 
     async def help(self, client, message, args):
         if len(args) < 1:
-            return await message.channel.send("Bruh.. What extension? `Usage: @Dyphan ext-help <command>`")
+            return await message.channel.send(HELP_MSG.format(self.ext_prefix))
         cmd = args[0]
         ext = self.extloader.find(message.guild, cmd)
         if not ext:
-            return await message.channel.send("Can't find that extension, bruh. It's probably not registered. `Usage: @Dyphan ext-help <command>`")
+            return await message.channel.send("Can't find that extension, bruh. It's probably not registered. `Usage: @Dyphan {0}help <command>`".format(self.ext_prefix))
         if 'help' not in ext:
             return await message.channel.send("Extension has no `help` text.")
         await message.channel.send("*`{0}`*: {1}".format(ext['command'], ext['help']))
@@ -142,11 +154,20 @@ class ELHandlers(object):
     async def list(self, client, message, args):
         await message.channel.send(self.extloader.list(message.guild))
 
+    async def _reserved(self, client, message, args):
+        await message.channel.send("Reserved command. Not yet implemented.")
+
+    async def ext_command_handler(self, client, message):
+        self.ext_prefix = self.dyphanbot.bot_controller._get_ext_prefix(message.guild)
+        parsed_cmd = utils.parse_command(self.dyphanbot, message, self.ext_prefix, True)
+        if not parsed_cmd:
+            return
+        cmd, args = parsed_cmd
+        if cmd[0] in self.reserved_cmds:
+            await getattr(self, cmd[0], self._reserved)(client, message, args)
+        else:
+            await self.call(client, message, cmd)
 
 def plugin_init(dyphanbot):
     el = ELHandlers(dyphanbot)
-
-    dyphanbot.add_command_handler("add-ext", el.add)
-    dyphanbot.add_command_handler("ext", el.call)
-    dyphanbot.add_command_handler("ext-help", el.help)
-    dyphanbot.add_command_handler("ext-list", el.list)
+    dyphanbot.add_message_handler(el.ext_command_handler, True)

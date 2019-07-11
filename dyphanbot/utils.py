@@ -12,3 +12,13 @@ def get_user_avatar_url(user):
 def truncate(text, limit, ellipsis='...'):
     """Generic function that truncates long text by a specified limit"""
     return text[:limit] + (text[limit:] and ellipsis)
+
+def parse_command(dyphanbot, message, prefix=None, force_prefix=False):
+    """ Parse a command message into the command name and arguments """
+    cmd = message.content.replace(dyphanbot.bot_mention(message), "").strip()
+    if prefix:
+        if force_prefix and not cmd.startswith(prefix):
+            return None
+        cmd = cmd[cmd.startswith(prefix) and len(prefix):].strip()
+    args = cmd.split()[1:]
+    return (cmd.split(), args)

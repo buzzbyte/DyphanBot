@@ -3,9 +3,59 @@
 import os
 import glob
 import logging
+import functools
 import importlib.util
 
 from dyphanbot.constants import PLUGIN_DIRS
+
+class Plugin(object):
+    """ Superclass for DyphanBot plugins. """
+
+    def __init__(self, dyphanbot):
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.dyphanbot = dyphanbot
+
+        self.logger.info("Initialized plugin: %s", self.__class__.__name__)
+        self.start()
+
+    def start(self):
+        pass
+
+    def load_json(self, filename, initial_data={}, save_json=None, **kwargs):
+        return self.dyphanbot.data.load_json(os.path.join(self.__class__.__name__, filename), initial_data, save_json, **kwargs)
+
+    def save_json(self, filename, data, **kwargs):
+        return self.dyphanbot.data.save_json(os.path.join(self.__class__.__name__, filename), data, **kwargs)
+
+    @staticmethod
+    def on_ready(handler):
+        assert not handler.__name__.startswith('_'), "Handlers must be public"
+        handler.__dict__['ready_handler'] = True
+        return handler
+
+    @staticmethod
+    def command(handler=None, *, cmd=None):
+        if not handler:
+            return functools.partial(Plugin.command, cmd=cmd)
+
+        if not cmd:
+            cmd = handler.__name__
+
+        assert not handler.__name__.startswith('_'), "Handlers must be public"
+        handler.__dict__['command'] = cmd
+
+        return handler
+
+    @staticmethod
+    def on_message(handler=None, *, raw=False):
+        if not handler:
+            return functools.partial(Plugin.on_message, raw=raw)
+
+        assert not handler.__name__.startswith('_'), "Handlers must be public"
+        handler.__dict__['msg_handler'] = True
+        handler.__dict__['raw'] = raw
+
+        return handler
 
 class PluginLoader(object):
     """ Provides methods to help load plugins.
@@ -23,13 +73,39 @@ class PluginLoader(object):
         self.plugin_dirs = PLUGIN_DIRS + [os.path.expanduser(pdirs) for pdirs in user_plugin_dirs]
         self.plugins = {}
 
+    def init_plugins(self):
+        plugins = Plugin.__subclasses__()
+        self.logger.debug("Found %d new-style plugins: %s", len(plugins), plugins)
+        for plugin in plugins:
+            try:
+                plugin_obj = plugin(self.dyphanbot)
+                for name, method in plugin_obj.__class__.__dict__.items():
+                    real_method = getattr(plugin_obj, name, None)
+                    if not real_method or not callable(real_method):
+                        continue
+                    if hasattr(method, "ready_handler"):
+                        self.dyphanbot.add_ready_handler(real_method)
+                    elif hasattr(method, "command"):
+                        self.dyphanbot.add_command_handler(real_method.command, real_method)
+                    elif hasattr(method, "msg_handler") and hasattr(method, "raw"):
+                        self.dyphanbot.add_message_handler(real_method, real_method.raw)
+                self.plugins[plugin.__name__] = plugin_obj
+            except Exception as err:
+                self.logger.warning("Unable to load plugin '%s': %s", plugin.__name__, err)
+                raise
+
+        if hasattr(self, 'subclassed_or_not_real_plugins'):
+            del self.subclassed_or_not_real_plugins # delet dis
+
     def load_plugins(self):
         """ Loads and initializes each plugin in the plugin directories. """
+        self.logger.debug("Searching %d plugin directories: %s", len(self.plugin_dirs), self.plugin_dirs)
         for directory in self.plugin_dirs:
             if not os.path.isdir(directory):
                 continue
 
             self.load_plugin_from_directory(directory)
+        self.init_plugins()
 
     def load_plugin_from_directory(self, directory):
         """ Loads and initializes each plugin in the argument directory.
@@ -59,10 +135,14 @@ class PluginLoader(object):
                 plugin.plugin_init(self.dyphanbot)
                 self.plugins[name] = plugin
                 self.logger.info("Loaded plugin: %s", name)
-        #except (ImportError, SyntaxError, NameError) as err:
-            #self.logger.warning("Unable to load plugin '%s': %s", name, err)
+            else:
+                # this is really dumb, but it's the only way I can get it to
+                # work with subclassed plugins for some reason...
+                if not hasattr(self, 'subclassed_or_not_real_plugins'):
+                    self.subclassed_or_not_real_plugins = {}
+                self.subclassed_or_not_real_plugins[name] = plugin
         except Exception as err:
-            #self.logger.warning("Unable to load plugin '%s': %s", name, err)
+            self.logger.warning("Unable to load plugin '%s': %s", name, err)
             raise
 
     def get_plugins(self):

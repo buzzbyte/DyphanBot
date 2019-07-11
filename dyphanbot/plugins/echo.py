@@ -67,7 +67,13 @@ class Echo(object):
 def plugin_init(dyphanbot):
     echo = Echo(dyphanbot)
 
-    dyphanbot.add_command_handler("echo", echo.echo)
+    dyphanbot.add_command_handler(
+        "echo", echo.echo,
+        permissions={
+            "botmaster": True, # botmaster overrides guild_params...
+            "guild_perms": ["manage_guild", "manage_roles"]
+        }
+    )
     dyphanbot.add_command_handler("emoji", echo.emoji)
     dyphanbot.add_command_handler("bigmoji", echo.bigmoji)
     dyphanbot.add_message_handler(echo.emojify, raw=True)

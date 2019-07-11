@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import logging
 
 from dyphanbot.constants import DATA_DIRS
 from dyphanbot.exceptions import InvalidConfigurationError
@@ -9,6 +10,7 @@ class ConfigManager(object):
     """ Contains methods for accessing and managing DyphanBot's configuration file """
 
     def __init__(self, dyphanbot):
+        self.logger = logging.getLogger(__name__)
         self.dyphanbot = dyphanbot
         self.data_dir = None
         self._config_fn = "config.json"
@@ -86,6 +88,7 @@ class ConfigManager(object):
             self._err("Configuration file is located at '{0}' but has not been set up yet.\n".format(config_path),
                       "Please provide the required Discord API token for DyphanBot to run.")
 
+        self.logger.info("Using configuration file located at '%s'.", config_path)
         return config
 
     def _get_key(self, key, default=None):
@@ -100,13 +103,15 @@ class DataManager(ConfigManager):
     def __init__(self, dyphanbot):
         super().__init__(dyphanbot)
 
-    def load_json(self, filename, initial_data={}, **kwargs):
+    def load_json(self, filename, initial_data={}, save_json=None, **kwargs):
         filepath = os.path.join(self.data_dir, filename)
         try:
             with open(filepath, 'r') as fd:
                 return json.load(fd, **kwargs)
-        except (OSError, IOError) as e:
-            return self.save_json(filename, initial_data)
+        except (OSError, IOError):
+            if not save_json:
+                save_json = self.save_json
+            return save_json(filename, initial_data)
 
     def save_json(self, filename, data, **kwargs):
         filepath = os.path.join(self.data_dir, filename)

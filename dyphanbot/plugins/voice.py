@@ -165,6 +165,32 @@ class MusicPlayer(object):
 
         return embed
 
+    def wh_embed(self, source):
+        embed = discord.Embed(
+            colour=discord.Colour(0x7289DA),
+            description=textwrap.shorten(source.description, 157, placeholder="..."),
+            timestamp=self.message.created_at
+        )
+
+        if source.thumbnail:
+            embed.set_thumbnail(url=source.thumbnail)
+        embed.set_author(name=source.title,
+            url=source.web_url
+        )
+
+        embed.set_footer(text="Requested by: {0.display_name}".format(source.requester), icon_url=utils.get_user_avatar_url(source.requester))
+        if source.uploader:
+            embed.add_field(name="Uploaded by", value=source.uploader, inline=True)
+
+        duration = source.duration
+        if duration:
+            min, sec = divmod(int(duration), 60)
+            hrs, min = divmod(min, 60)
+            dfmtstr = "{0:d}:{1:02d}:{2:02d}" if hrs > 0 else "{1:02d}:{2:02d}"
+            embed.add_field(name="Duration", value=dfmtstr.format(hrs, min, sec), inline=True)
+
+        return embed
+
     async def player_loop(self):
         """ Main player loop """
         await self.client.wait_until_ready()
@@ -198,22 +224,48 @@ class MusicPlayer(object):
             source.cleanup()
             self.current = None
 
+    async def find_or_create_webhook(self):
+        # IDEA: Make this part of the core instead
+        for webhook in await self.channel.webhooks():
+            if "DyphanBot" in webhook.name:
+                return webhook
+        if self.guild.me.permissions_in(self.channel).manage_webhooks:
+            return await self.channel.create_webhook(name="DyphanBot Webhook")
+        return None
+
     async def update_now_playing(self):
         """ Deletes previous playing status embed and sends a new one. """
-        await self.delete_last_playing()
-        self.now_playing = await self.channel.send(embed=self.np_embed(self.current))
+        webhook = await self.find_or_create_webhook()
+        if webhook:
+            self.now_playing = await webhook.send(
+                embed=self.wh_embed(self.current),
+                avatar_url=utils.get_user_avatar_url(self.message.guild.me),
+                username=("Now Streaming" if self.current.is_live else "Now Playing") if self.guild.voice_client.is_playing() else "Paused"
+            )
+        else:
+            await self.delete_last_playing()
+            self.now_playing = await self.channel.send(embed=self.np_embed(self.current))
 
     async def delete_last_playing(self, last_source=None):
         """ Deletes the last playing status embed and, if applicable, replaces
         it with a played status embed.
         """
+        webhook = await self.find_or_create_webhook()
         if self.now_playing:
             try:
                 await self.now_playing.delete()
                 if last_source:
-                    await self.channel.send(embed=self.played_embed(last_source))
+                    if webhook:
+                        await webhook.send(
+                            embed=self.wh_embed(last_source),
+                            avatar_url=utils.get_user_avatar_url(self.message.guild.me),
+                            username="Played"
+                        )
+                    else:
+                        await self.channel.send(embed=self.played_embed(last_source))
             except discord.HTTPException:
-                pass
+                raise
+                #pass
 
     def clear_queue(self):
         """ Clears the playlist queue. """
@@ -286,9 +338,10 @@ class Music(object):
 
         player = self.get_player(client, message)
         if song.strip() == "":
-            if player.current and v_client.is_paused():
+            if v_client.is_paused():
                 v_client.resume()
-                await player.update_now_playing()
+                if player.current:
+                    await player.update_now_playing()
             else:
                 await message.channel.send("Nothing was paused, bruh.")
             return
@@ -305,7 +358,8 @@ class Music(object):
 
         v_client.pause()
         player = self.get_player(client, message)
-        await player.update_now_playing()
+        if player.current:
+            await player.update_now_playing()
 
     async def stop(self, client, message, args):
         """ Stops playing audio and clears the playlist queue. """

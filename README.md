@@ -23,9 +23,10 @@ Currently, there are three implemented configuration settings:
 - [ ] Revise the way handlers are handled.
 - [ ] Rethink how plugins should work.
 - [ ] Write a good "API" layer for plugins to use.
+- [ ] Permissions System
 - [ ] Implement basic voice functionality that multiple plugins can use.
 - [x] ~~Implement saving data.~~
 - [x] ~~Rewrite the voice plugin.~~
 - [x] ~~Make use of an actual configuration file.~~
-- [ ] Possibly make a runtime patch to discord.py to implement voice receive
-    (until it's officially available).
+- [ ] ~~Possibly make a runtime patch to discord.py to implement voice receive
+    (until it's officially available).~~ Not important at the moment.

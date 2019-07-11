@@ -99,3 +99,15 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+### VisualStudioCode ###
+.vscode/*
+# Not needed for this project
+#!.vscode/settings.json
+#!.vscode/tasks.json
+#!.vscode/launch.json
+#!.vscode/extensions.json
+
+### VisualStudioCode Patch ###
+# Ignore all local history of files
+.history
