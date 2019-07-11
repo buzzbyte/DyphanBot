@@ -14,16 +14,18 @@ DyphanBot looks for a `config.json` file in `~/.dyphan` and `~/.config/dyphan`
 directories. Once it finds the file, it will assign the location it first found
 it in as the default data directory.
 
-Currently, there are three implemented configuration settings:
+Currently, there are four main configuration settings:
 - `token`: The Discord API token required for DyphanBot to run.
+- `bot_masters`: A list of Discord user IDs that have access to DyphanBot's
+    software (basically sysadmins).
 - `disabled_plugins`: The list of plugins that should be disabled.
 - `plugin_dirs`: Additional plugin directories DyphanBot can look in.
 
 ## TODO
 - [ ] Revise the way handlers are handled.
-- [ ] Rethink how plugins should work.
-- [ ] Write a good "API" layer for plugins to use.
-- [ ] Permissions System
+- [ ] Rethink how plugins should work (In progress: Subclassed plugins).
+- [ ] Write a good "API" layer for plugins (In progress: Subclassed plugins).
+- [x] Permissions System
 - [ ] Implement basic voice functionality that multiple plugins can use.
 - [x] ~~Implement saving data.~~
 - [x] ~~Rewrite the voice plugin.~~
