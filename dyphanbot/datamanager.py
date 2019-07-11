@@ -9,7 +9,7 @@ from dyphanbot.exceptions import InvalidConfigurationError
 class ConfigManager(object):
     """ Contains methods for accessing and managing DyphanBot's configuration file """
 
-    def __init__(self, dyphanbot):
+    def __init__(self, dyphanbot, config_path=None):
         self.logger = logging.getLogger(__name__)
         self.dyphanbot = dyphanbot
         self.data_dir = None
@@ -18,7 +18,7 @@ class ConfigManager(object):
             "token": "_YOUR_DISCORD_API_TOKEN_HERE_"
         }
 
-        self._config = self._setup_config()
+        self._config = self._setup_config(config_path)
 
     def __getattribute__(self, name):
         # This class' "protected" methods should only be called by either
@@ -69,8 +69,9 @@ class ConfigManager(object):
         os.makedirs(self.data_dir, exist_ok=True)
         return self._find_or_create_file(os.path.join(self.data_dir, self._config_fn))
 
-    def _setup_config(self):
-        config_path = self._find_config()
+    def _setup_config(self, config_path=None):
+        if not config_path:
+            config_path = self._find_config()
         with open(config_path, 'r+') as fd:
             raw_data = fd.read()
             if raw_data.strip() == "":
@@ -100,8 +101,8 @@ class ConfigManager(object):
 class DataManager(ConfigManager):
     """ Handles data files relative to the active data dir """
 
-    def __init__(self, dyphanbot):
-        super().__init__(dyphanbot)
+    def __init__(self, dyphanbot, config_path=None):
+        super().__init__(dyphanbot, config_path)
 
     def load_json(self, filename, initial_data={}, save_json=None, **kwargs):
         filepath = os.path.join(self.data_dir, filename)

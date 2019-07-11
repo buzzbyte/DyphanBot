@@ -67,3 +67,33 @@ class BotController:
             self.guildsettings[guild_id]["ext-prefix" if ext_arg else "prefix"] = args
             self.guildsettings = self._save_settings(self.guildsettings)
             await message.channel.send("The {0} prefix for this guild was set to `{1}`".format("extension" if ext_arg else "command", self.guildsettings[guild_id]["ext-prefix" if ext_arg else "prefix"]))
+
+    async def disable(self, message, args):
+        guild_id = str(message.guild.id)
+        if not message.author.guild_permissions.manage_guild:
+            return await message.channel.send("You don't have permission to disable commands for this server!!")
+        if len(args) < 1:
+            disabled_cmds_lst = []
+            if self.guildsettings.get(guild_id):
+                disabled_cmds = self.guildsettings[guild_id].get("disabled_commands") or []
+                disabled_cmds_lst = disabled_cmds
+            await message.channel.send("Disabled commands: {0}.".format(', '.join(["`{0}`".format(x) for x in disabled_cmds_lst])) if len(disabled_cmds_lst) > 0 else "No commands disabled on this server.")
+        elif len(args) > 1:
+            if not self.guildsettings.get(guild_id):
+                self.guildsettings[guild_id] = {}
+            if not "disabled_commands" in self.guildsettings[guild_id]:
+                self.guildsettings[guild_id]["disabled_commands"] = []
+            if args[0] == "add":
+                self.guildsettings[guild_id]["disabled_commands"] += list(args[1:])
+                self.guildsettings = self._save_settings(self.guildsettings)
+                await message.channel.send("Successfully disabled commands: {0}.".format(', '.join(["`{0}`".format(x) for x in args[1:]])))
+            elif args[0] == "rem":
+                disabled_cmds = self.guildsettings[guild_id]["disabled_commands"]
+                new_list = [x for x in disabled_cmds if x not in args[1:]]
+                self.guildsettings[guild_id]["disabled_commands"] = new_list
+                self.guildsettings = self._save_settings(self.guildsettings)
+                await message.channel.send("Successfully enabled commands: {0}.".format(', '.join(["`{0}`".format(x) for x in args[1:]])))
+            else:
+                await message.channel.send("Invalid subcommand.\nUsage: `@{0} disable [<add|rem> <commands...>]`".format(self.dyphanbot.user.name))
+        else:
+            await message.channel.send("Adds/Removes commands to/from the disabled commands list on this server.\nUsage: `@{0} disable [<add|rem> <commands...>]`".format(self.dyphanbot.user.name))

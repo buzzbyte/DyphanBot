@@ -13,6 +13,7 @@ import dyphanbot.utils as utils
 HELP_MSG = """
 **Extensions Help**
 `{0}add <url>`: Registers an extension to this server.
+`{0}remove <extension_command>`: Unregisters an extension from this server.
 `{0}list`: Lists extensions registered on this server.
 `{0}help [extension_command]`: Displays extension help text.
 `{0}<extension_command>`: Calls an extension.
@@ -74,7 +75,22 @@ class ExtensionLoader(object):
 
         self.db[guild_id][ext_id] = ext
         self.save_db(self.db)
-        return "Successfully registerd `%s`" % ext['name']
+        return "Successfully registered `%s`" % ext['name']
+    
+    def unregister(self, guild, cmd):
+        ext = self.find(guild, cmd)
+        if not ext:
+            return "Extension `{0}` not found on this server.".format(cmd)
+
+        guild_id = str(guild.id)
+        ext_id = ext['id']
+        self.db = self.load_db()
+        if ext_id not in self.db.get(guild_id, {}) or {}:
+            return "Extension not found on this server. (2)"
+
+        self.db[guild_id].pop(ext_id, None)
+        self.save_db(self.db)
+        return "Successfully unregistered `%s`" % ext['name']
 
     def find(self, guild, cmd):
         self.db = self.load_db()
@@ -92,7 +108,7 @@ class ExtensionLoader(object):
     def call(self, message, cmd, args):
         ext = self.find(message.guild, cmd)
         if not ext:
-            return { "content": "Extension not found on this server." }
+            return { "content": "Extension `{0}` not found on this server.".format(cmd) }
         req_url = ext['url-format'].format(args, message=message)
         try:
             r = requests.get(req_url)
@@ -122,18 +138,28 @@ class ELHandlers(object):
     def __init__(self, dyphanbot):
         self.dyphanbot = dyphanbot
         self.extloader = ExtensionLoader(dyphanbot)
-        self.reserved_cmds = [ "add", "help", "list" ]
+        self.reserved_cmds = [ "add", "remove", "help", "list" ]
         self.ext_prefix = '+'
 
     async def add(self, client, message, args):
+        if not message.author.guild_permissions.manage_guild:
+            return await message.channel.send("You don't have permission to add extensions to this server.")
         if len(args) < 1:
-            return await message.channel.send("Bruh.. What extension? `Usage: @Dyphan {0}add <url>`".format(self.ext_prefix))
+            return await message.channel.send("Bruh.. What extension? `Usage: @{0} {1}add <url>`".format(self.dyphanbot.user.name, self.ext_prefix))
         url = args[0]
         await message.channel.send(self.extloader.register(message.guild, url))
+    
+    async def remove(self, client, message, args):
+        if not message.author.guild_permissions.manage_guild:
+            return await message.channel.send("You don't have permission to remove extensions from this server.")
+        if len(args) < 1:
+            return await message.channel.send("Bruh.. What extension? `Usage: @{0} {1}remove <command>`".format(self.dyphanbot.user.name, self.ext_prefix))
+        cmd = args[0]
+        await message.channel.send(self.extloader.unregister(message.guild, cmd))
 
     async def call(self, client, message, args):
         if len(args) < 1:
-            return await message.channel.send("Bruh.. What extension? `Usage: @Dyphan {0}<command> [args]`".format(self.ext_prefix))
+            return await message.channel.send("Bruh.. What extension? `Usage: @{0} {1}<command> [args]`".format(self.dyphanbot.user.name, self.ext_prefix))
         cmd = args[0]
         #ext_args = args[1:]
         mentionless = message.content.replace(self.dyphanbot.bot_mention(message), "", 1).strip()
@@ -146,10 +172,10 @@ class ELHandlers(object):
         cmd = args[0]
         ext = self.extloader.find(message.guild, cmd)
         if not ext:
-            return await message.channel.send("Can't find that extension, bruh. It's probably not registered. `Usage: @Dyphan {0}help <command>`".format(self.ext_prefix))
+            return await message.channel.send("Can't find that extension, bruh. It's probably not registered. `Usage: @{0} {1}help <command>`".format(self.dyphanbot.user.name, self.ext_prefix))
         if 'help' not in ext:
             return await message.channel.send("Extension has no `help` text.")
-        await message.channel.send("*`{0}`*: {1}".format(ext['command'], ext['help']))
+        await message.channel.send("*`{0}`*: {1}\n{2}".format(ext['command'], ext['help'], ext.get('website', "")))
 
     async def list(self, client, message, args):
         await message.channel.send(self.extloader.list(message.guild))

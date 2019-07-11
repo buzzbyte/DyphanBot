@@ -19,12 +19,12 @@ class DyphanBot(discord.Client):
     """
     Main class for DyphanBot
     """
-    def __init__(self, debug=False):
+    def __init__(self, debug=False, config_path=None):
         super().__init__()
         self.logger = logging.getLogger(__name__)
         if debug:
             logging.getLogger("dyphanbot").setLevel(logging.DEBUG)
-        self.data = DataManager(self)
+        self.data = DataManager(self, config_path)
         self.bot_controller = BotController(self)
         self.pluginloader = PluginLoader(self,
             disabled_plugins=self.data._get_key('disabled_plugins', []),
@@ -68,6 +68,11 @@ class DyphanBot(discord.Client):
         if not prefix and await self.bot_controller._process_command(message, cmd, args):
             return None
         if cmd in self.commands:
+            # handle commands disabled by the guild settings
+            disabled_commands = self.bot_controller._get_settings_for_guild(message.guild, "disabled_commands")
+            if disabled_commands and (cmd in disabled_commands):# and not message.author.guild_permissions.manage_guild:
+                return None
+            
             if self.commands[cmd].permissions:
                 # handle permissions (botmaster and guild)
                 cmd_perms = self.commands[cmd].permissions
@@ -80,11 +85,6 @@ class DyphanBot(discord.Client):
                         if not getattr(member_perms, perms):
                             return None
             
-            # handle commands disabled by the guild settings
-            disabled_commands = self.bot_controller._get_settings_for_guild(message.guild, "disabled_commands")
-            if disabled_commands and cmd in disabled_commands:
-                return None
-            
             return await self.commands[cmd](self, message, args)
         return None
 
@@ -95,6 +95,11 @@ class DyphanBot(discord.Client):
         self.logger.info("Initializing %s (%s) running %s", self.user.name, self.user.id, CB_NAME)
 
     async def on_message(self, message):
+        # Disable DMs until we support them
+        if isinstance(message.channel, discord.DMChannel):
+            if message.author != self.user:
+                return await message.channel.send("Direct messages are not fully supported yet.. Still have to work out bugs and stuff")
+            return
         cmd_handler = None
         prefix = self.bot_controller._get_prefix(message.guild)
         full_cmd, args = utils.parse_command(self, message, prefix)
