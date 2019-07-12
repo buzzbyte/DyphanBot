@@ -310,11 +310,11 @@ class Music(object):
 
     async def join(self, client, message, args):
         """ Connects to the user's voice channel. """
-        v_channel = message.author.voice.channel
-        if not v_channel:
+        if not message.author.voice or not message.author.voice.channel:
             await message.channel.send("You're not in a voice channel... ~~dummy~~")
             return False
-
+        
+        v_channel = message.author.voice.channel
         v_client = message.guild.voice_client
         if v_client:
             await v_client.move_to(v_channel)

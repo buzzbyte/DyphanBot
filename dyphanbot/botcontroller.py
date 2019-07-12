@@ -42,15 +42,23 @@ class BotController:
         guild_id = str(message.guild.id)
         if len(args) < 1:
             prefix = None
+            ext_prefix = '+'
             if self.guildsettings.get(guild_id):
                 prefix = self.guildsettings[guild_id].get("prefix")
-            await message.channel.send("Command prefix: `{0}`".format(prefix if prefix else "<Unset>"))
+                ext_prefix = self.guildsettings[guild_id].get("ext-prefix", '+')
+            await message.channel.send(
+                "Command prefix: `{0}`\nExtension prefix: `{1}`".format(
+                    prefix if prefix else "<Unset>",
+                    ext_prefix if ext_prefix else "<Unset>"
+                )
+            )
         elif len(args) <= 1 and args[0] == "ext":
             ext_prefix = '+'
             if self.guildsettings.get(guild_id):
                 ext_prefix = self.guildsettings[guild_id].get("ext-prefix", '+')
             await message.channel.send("Extension prefix: `{0}`".format(ext_prefix if ext_prefix else "<Unset>"))
         else:
+            ext_arg = False
             if args[0] == "ext":
                 ext_arg = True
             if not message.author.guild_permissions.manage_guild:

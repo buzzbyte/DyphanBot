@@ -22,10 +22,10 @@ class Echo(object):
         #pprint(message.guild.emojis)
         emoji = self.find_emoji(client, message, inputtext)
         if emoji:
-            data = await self.get_bytes_from_url(emoji.url)
+            data = await self.get_bytes_from_url(str(emoji.url))
             if not data:
                 return await message.channel.send("Can't get emoji...")
-            await message.channel.send(file=discord.File(data, filename=emoji.name+"."+emoji.url.split(".")[-1]))
+            await message.channel.send(file=discord.File(data, filename=emoji.name+"."+str(emoji.url).split(".")[-1]))
 
     async def emoji(self, client, message, args):
         inputtext = " ".join(args)

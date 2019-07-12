@@ -1,4 +1,25 @@
+import random
+
 from dyphanbot import Plugin
+
+OMAEWAMOUSHINDEIRU = [
+    "おまえはもうしんでいる",
+    "おまえはもう死んでいる",
+    "お前はもうしんでいる",
+    "お前はもう死んでいる"
+]
+
+NANI = [
+    "**なに？！**",
+    "**何？！**"
+]
+
+BESTGIRL = [
+    "best girl dyphan",
+    "best girl dyphanbot",
+    "dyphan is best girl",
+    "dyphanbot is best girl"
+]
 
 class ExamplePlugin(Plugin):
     """ Demonstrates new plugin structure. """
@@ -25,8 +46,10 @@ class ExamplePlugin(Plugin):
 
     @Plugin.on_message(raw=True)
     async def bestgirl(self, client, message):
-        if "best girl dyphan" in message.content.lower():
+        if any(bgrill in message.content.lower() for bgrill in BESTGIRL):
             await message.channel.send("no u :heart:")
+        elif any(omaeshin in message.content for omaeshin in OMAEWAMOUSHINDEIRU):
+            await message.channel.send(random.choice(NANI))
 
 #def plugin_init(dyphanbot):
 #    pass
