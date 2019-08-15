@@ -9,6 +9,7 @@ from youtube_dl import YoutubeDL
 
 import discord
 import dyphanbot.utils as utils
+from dyphanbot import Plugin
 
 YTDL_OPTS = {
     'format': 'webm[abr>0]/bestaudio/best',
@@ -74,6 +75,9 @@ class MusicPlayer(object):
         self.now_playing = None
         self.volume = 0.5
         self.current = None
+
+        # TODO: Make webhook embeds actually optional...
+        self.can_use_webhooks = True
 
         self.audio_player = self.client.loop.create_task(self.player_loop())
 
@@ -225,11 +229,10 @@ class MusicPlayer(object):
             self.current = None
 
     async def find_or_create_webhook(self):
-        # IDEA: Make this part of the core instead
-        for webhook in await self.channel.webhooks():
-            if "DyphanBot" in webhook.name:
-                return webhook
-        if self.guild.me.permissions_in(self.channel).manage_webhooks:
+        if self.guild.me.permissions_in(self.channel).manage_webhooks and self.can_use_webhooks:
+            for webhook in await self.channel.webhooks():
+                if "DyphanBot" in webhook.name:
+                    return webhook
             return await self.channel.create_webhook(name="DyphanBot Webhook")
         return None
 
@@ -254,18 +257,18 @@ class MusicPlayer(object):
         if self.now_playing:
             try:
                 await self.now_playing.delete()
-                if last_source:
-                    if webhook:
-                        await webhook.send(
-                            embed=self.wh_embed(last_source),
-                            avatar_url=utils.get_user_avatar_url(self.message.guild.me),
-                            username="Played"
-                        )
-                    else:
-                        await self.channel.send(embed=self.played_embed(last_source))
             except discord.HTTPException:
-                raise
-                #pass
+                pass
+            
+            if last_source:
+                if webhook:
+                    await webhook.send(
+                        embed=self.wh_embed(last_source),
+                        avatar_url=utils.get_user_avatar_url(self.message.guild.me),
+                        username="Played"
+                    )
+                else:
+                    await self.channel.send(embed=self.played_embed(last_source))
 
     def clear_queue(self):
         """ Clears the playlist queue. """
@@ -320,7 +323,7 @@ class Music(object):
             await v_client.move_to(v_channel)
         else:
             await v_channel.connect()
-        return True
+        return message.guild.voice_client
 
     async def play(self, client, message, args):
         """ Plays audio from a URL, if provided. Otherwise, resumes paused
@@ -332,8 +335,8 @@ class Music(object):
 
         v_client = message.guild.voice_client
         if not v_client:
-            joined = await self.join(client, message, [])
-            if not joined:
+            v_client = await self.join(client, message, [])
+            if not v_client:
                 return
 
         player = self.get_player(client, message)
@@ -382,14 +385,13 @@ class Music(object):
             return await message.channel.send("I ain't in a voice chat, bruh..")
 
         player = self.get_player(client, message)
+        vol = player.volume * 100
         if len(args) > 0:
             if args[0].strip() == "up":
-                vol = player.volume * 100
                 vol += 5
                 if vol > 100:
                     vol = 100
             elif args[0].strip() == "down":
-                vol = player.volume * 100
                 vol -= 5
                 if vol < 1:
                     vol = 1
@@ -401,12 +403,12 @@ class Music(object):
                 except ValueError:
                     return await message.channel.send(".. What? Use either `up`, `down`, or a number between 1 to 100.")
         else:
-            return await message.channel.send("Volume can be either `up`, `down`, or a number between 1 to 100.")
+            return await message.channel.send("Volume: **{0:.1f}%**\nVolume can be either `up`, `down`, or a number from 1 to 100.".format(vol))
 
         if v_client.source:
             v_client.source.volume = vol / 100
         player.volume = vol / 100
-        await message.channel.send("**`{0}`**: Set the volume to **{1}%**".format(message.author, vol))
+        await message.channel.send("**`{0}`**: Set the volume to **{1:.1f}%**".format(message.author, vol))
 
     async def skip(self, client, message, args):
         """ Skip the currently playing audio. """
@@ -434,6 +436,27 @@ class Music(object):
             return await message.channel.send("I'm not playing anything...")
 
         await player.update_now_playing()
+    
+    async def queue(self, client, message, args):
+        """ Displays the current playlist queue """
+        v_client = message.guild.voice_client
+        if not v_client or not v_client.is_connected():
+            return await message.channel.send("I'm not even connected to a voice channel, dude!!")
+        
+        player = self.get_player(client, message)
+        if player.queue.empty():
+            return await message.channel.send("Playlist queue is empty...")
+        
+        song_count = 0
+        queue_str = "**Playlist Queue:**\n"
+        for entry in player.queue._queue:
+            if isinstance(entry, YTDLSource) or isinstance(entry, dict):
+                song_count += 1
+                queue_str += "  * *{0}*\n".format(entry['title'])
+        if song_count <= 0:
+            return await message.channel.send("Playlist queue has no songs.")
+        
+        await message.channel.send(queue_str)
 
     async def leave(self, client, message, args):
         """ Disconnects from the voice client. """
@@ -444,13 +467,14 @@ class Music(object):
         player = self.get_player(client, message)
         player.destroy()
 
-class Voice(object):
+class Voice(Plugin):
     """ Contains the Voice command which handles the Music sub-commands """
 
     def __init__(self, dyphanbot):
-        self.dyphanbot = dyphanbot
+        super().__init__(dyphanbot)
         self.music = Music(dyphanbot)
-
+    
+    @Plugin.command
     async def voice(self, client, message, args):
         """ The Voice command.
         Handles subcommands for playing and controlling audio.
@@ -462,14 +486,14 @@ class Voice(object):
             scmd = args[0].strip()
             if scmd in sub_cmds:
                 if not hasattr(self.music, scmd):
-                    await message.channel.send("Not implemented yet...")
+                    return await message.channel.send("Not implemented yet...")
                 await getattr(self.music, scmd)(client, message, args[1:])
             else:
                 await message.channel.send("lol wut?")
         else:
             await message.channel.send("La la la!!")
 
-def plugin_init(dyphanbot):
-    """ Plugin entry point. """
-    voiceplugin = Voice(dyphanbot)
-    dyphanbot.add_command_handler("voice", voiceplugin.voice)
+#def plugin_init(dyphanbot):
+#    """ Plugin entry point (deprecated). """
+#    voiceplugin = Voice(dyphanbot)
+#    dyphanbot.add_command_handler("voice", voiceplugin.voice)
