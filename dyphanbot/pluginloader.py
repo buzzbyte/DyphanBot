@@ -32,6 +32,13 @@ class Plugin(object):
         assert not handler.__name__.startswith('_'), "Handlers must be public"
         handler.__dict__['ready_handler'] = True
         return handler
+    
+    @staticmethod
+    def on_member_join(handler):
+        assert not handler.__name__.startswith('_'), "Handlers must be public"
+        handler.__dict__['mjoin_handler'] = True
+
+        return handler
 
     @staticmethod
     def command(handler=None, *, cmd=None):
@@ -85,6 +92,8 @@ class PluginLoader(object):
                         continue
                     if hasattr(method, "ready_handler"):
                         self.dyphanbot.add_ready_handler(real_method)
+                    elif hasattr(method, "mjoin_handler"):
+                        self.dyphanbot.add_mjoin_handler(real_method)
                     elif hasattr(method, "command"):
                         self.dyphanbot.add_command_handler(real_method.command, real_method)
                     elif hasattr(method, "msg_handler") and hasattr(method, "raw"):

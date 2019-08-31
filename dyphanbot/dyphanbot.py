@@ -31,8 +31,11 @@ class DyphanBot(discord.Client):
             user_plugin_dirs=self.data._get_key('plugin_dirs', []))
 
         self.commands = {}
+
+        # TODO: make this into one dict with all the handlers
         self.msg_handlers = []
         self.ready_handlers = []
+        self.mjoin_handlers = []
 
     def run(self):
         self.pluginloader.load_plugins()
@@ -49,6 +52,9 @@ class DyphanBot(discord.Client):
     def add_ready_handler(self, handler):
         self.logger.debug("On ready handler called for '%s'", handler.__name__)
         self.ready_handlers.append(handler)
+    
+    def add_mjoin_handler(self, handler):
+        self.mjoin_handlers.append(handler)
 
     def bot_mention(self, msg):
         """Returns a mention string for the bot"""
@@ -93,6 +99,10 @@ class DyphanBot(discord.Client):
         for handler in self.ready_handlers:
             await handler(self)
         self.logger.info("Initializing %s (%s) running %s", self.user.name, self.user.id, CB_NAME)
+    
+    async def on_member_join(self, member):
+        for handler in self.mjoin_handlers:
+            await handler(self, member)
 
     async def on_message(self, message):
         # Disable DMs until we support them

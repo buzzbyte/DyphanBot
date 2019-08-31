@@ -30,6 +30,10 @@ class ExamplePlugin(Plugin):
     @Plugin.on_ready
     async def ready(self, client):
         self.logger.info("Bot is ready!!")
+    
+    @Plugin.on_member_join
+    async def mjoin(self, client, member):
+        self.logger.info("Member ({0}) joined a guild ({1}).".format(str(member), str(member.guild)))
 
     @Plugin.command(cmd="hello")
     async def helloplugin(self, client, message, args):
