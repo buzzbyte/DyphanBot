@@ -26,6 +26,9 @@ class Plugin(object):
 
     def save_json(self, filename, data, **kwargs):
         return self.dyphanbot.data.save_json(os.path.join(self.__class__.__name__, filename), data, **kwargs)
+    
+    def get_local_prefix(self, message):
+        return self.dyphanbot.bot_controller._get_prefix(message.guild) or "{} ".format(self.dyphanbot.bot_mention(message))
 
     @staticmethod
     def on_ready(handler):
@@ -41,15 +44,17 @@ class Plugin(object):
         return handler
 
     @staticmethod
-    def command(handler=None, *, cmd=None):
+    def command(handler=None, *, cmd=None, botmaster=False, perms=[]):
         if not handler:
-            return functools.partial(Plugin.command, cmd=cmd)
+            return functools.partial(Plugin.command, cmd=cmd, botmaster=botmaster, perms=perms)
 
         if not cmd:
             cmd = handler.__name__
 
         assert not handler.__name__.startswith('_'), "Handlers must be public"
         handler.__dict__['command'] = cmd
+        handler.__dict__['botmaster'] = botmaster
+        handler.__dict__['guild_perms'] = perms
 
         return handler
 
@@ -95,7 +100,13 @@ class PluginLoader(object):
                     elif hasattr(method, "mjoin_handler"):
                         self.dyphanbot.add_mjoin_handler(real_method)
                     elif hasattr(method, "command"):
-                        self.dyphanbot.add_command_handler(real_method.command, real_method)
+                        self.dyphanbot.add_command_handler(
+                            real_method.command, real_method,
+                            permissions={
+                                "botmaster": real_method.botmaster,
+                                "guild_perms": real_method.guild_perms
+                            }
+                        )
                     elif hasattr(method, "msg_handler") and hasattr(method, "raw"):
                         self.dyphanbot.add_message_handler(real_method, real_method.raw)
                 self.plugins[plugin.__name__] = plugin_obj

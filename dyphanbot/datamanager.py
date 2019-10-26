@@ -105,6 +105,10 @@ class DataManager(ConfigManager):
         super().__init__(dyphanbot, config_path)
 
     def load_json(self, filename, initial_data={}, save_json=None, **kwargs):
+        """ Loads JSON from a filename in the data directory.
+        If the file doesn't exist, save a new one with the initial data using
+        either the default save method or a specified one.
+        """
         filepath = os.path.join(self.data_dir, filename)
         try:
             with open(filepath, 'r') as fd:
@@ -115,7 +119,10 @@ class DataManager(ConfigManager):
             return save_json(filename, initial_data)
 
     def save_json(self, filename, data, **kwargs):
+        """ Saves JSON to a filename in the data directory and returns the data.
+        """
         filepath = os.path.join(self.data_dir, filename)
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, 'w') as fd:
             json.dump(data, fd, **kwargs)
 

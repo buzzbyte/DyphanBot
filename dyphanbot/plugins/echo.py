@@ -70,7 +70,7 @@ def plugin_init(dyphanbot):
     dyphanbot.add_command_handler(
         "echo", echo.echo,
         permissions={
-            "botmaster": True, # botmaster overrides guild_params...
+            "botmaster": True, # botmaster overrides guild_params (for botmasters)...
             "guild_perms": ["manage_guild", "manage_roles"]
         }
     )
