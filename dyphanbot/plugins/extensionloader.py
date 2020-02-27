@@ -1,9 +1,11 @@
 """ DyphanBot Per-Server Extensions implementation """
 import os
+import io
 import json
 import traceback
 import posixpath
 from pprint import pprint
+from base64 import b64decode
 
 import requests
 import discord
@@ -43,11 +45,28 @@ class ELCore(object):
 
     def parse_output(self, output):
         """ Parses JSON output to `send()` parameters. """
+        out_files = []
+        if 'files' in output:
+            # Get files from datauris
+            for jfo in output['files']:
+                data_uri = jfo.get('datauri', "")
+                filename = jfo.get('filename')
+                spoiler = jfo.get('spoiler', False)
+                _, encoded = data_uri.split(",", 1)
+                if not data_uri:
+                    continue
+
+                # Get binary from base64 and make it a discord File object
+                fio = io.BytesIO(b64decode(encoded))
+                out_files.append(discord.File(fio, filename=filename, spoiler=spoiler))
+        else:
+            out_files = None
+        
         return {
             "content": (output['text'] if 'text' in output else None),
             "embed": (discord.Embed.from_dict(output['embed']) if 'embed' in output else None),
             "tts": (output['tts'] if 'tts' in output else False),
-            "files": (output['files'] if 'files' in output else None),
+            "files": out_files,
             "file": None, # Only allow list of files to prevent exceptions
             "delete_after": (output['delete_after'] if 'delete_after' in output else None)
         }
