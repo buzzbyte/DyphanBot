@@ -1,5 +1,5 @@
-# DyphanBot (rewrite)
-~~<sup>~~Dyphan's transplanted guts~~</sup>~~
+# DyphanBot
+~~<sup>~~Dyphan's guts~~</sup>~~
 
 An expandable Discord bot! Written in Python3 using
 [discord.py](https://github.com/Rapptz/discord.py) (rewrite branch).
@@ -20,15 +20,3 @@ Currently, there are four main configuration settings:
     software (basically sysadmins).
 - `disabled_plugins`: The list of plugins that should be disabled.
 - `plugin_dirs`: Additional plugin directories DyphanBot can look in.
-
-## TODO
-- [ ] Revise the way handlers are handled.
-- [ ] Rethink how plugins should work (In progress: Subclassed plugins).
-- [ ] Write a good "API" layer for plugins (In progress: Subclassed plugins).
-- [x] Permissions System
-- [ ] Implement basic voice functionality that multiple plugins can use.
-- [x] ~~Implement saving data.~~
-- [x] ~~Rewrite the voice plugin.~~
-- [x] ~~Make use of an actual configuration file.~~
-- [ ] ~~Possibly make a runtime patch to discord.py to implement voice receive
-    (until it's officially available).~~ Not important at the moment.
