@@ -29,6 +29,33 @@ class Plugin(object):
     
     def get_local_prefix(self, message):
         return self.dyphanbot.bot_controller._get_prefix(message.guild) or "{} ".format(self.dyphanbot.bot_mention(message))
+    
+    async def help(self, message, args):
+        """ Overridable help method for plugins.
+        
+        Args:
+            args (:obj:`list` of :obj:`str`): An optional list of arguments
+                passed to the help command.
+
+        Returns:
+            A dictionary consisting of:
+                - title:    A friendly title for the plugin. Optional, but
+                            generally recomended.
+                - helptext: A general description of the plugin. Translates to
+                            an embed description upon parsing.
+                - sections: Various optional sections that describe different
+                            parts of the plugin. Translates to an embed's field
+                            list. (optional)
+                - color:    The color of the embed (defaults to the "blurple"
+                            color: #7289DA/7506394).
+                - unlisted: Whether the plugin should be listed upon calling
+                            the `plugins` command (defaults to `False` if this
+                            method is overridden).
+        """
+        return {
+            "helptext": "No help provided... :c",
+            "unlisted": True
+        }
 
     @staticmethod
     def on_ready(handler):
@@ -87,7 +114,7 @@ class PluginLoader(object):
 
     def init_plugins(self):
         plugins = Plugin.__subclasses__()
-        self.logger.debug("Found %d new-style plugins: %s", len(plugins), plugins)
+        self.logger.debug("Found %d subclassed plugins: %s", len(plugins), plugins)
         for plugin in plugins:
             try:
                 plugin_obj = plugin(self.dyphanbot)
@@ -105,7 +132,8 @@ class PluginLoader(object):
                             permissions={
                                 "botmaster": real_method.botmaster,
                                 "guild_perms": real_method.guild_perms
-                            }
+                            },
+                            plugin=plugin_obj
                         )
                     elif hasattr(method, "msg_handler") and hasattr(method, "raw"):
                         self.dyphanbot.add_message_handler(real_method, real_method.raw)

@@ -41,7 +41,8 @@ class DyphanBot(discord.Client):
         self.pluginloader.load_plugins()
         super().run(self.data._get_key('token'), bot=self.data._get_key('bot', True))
 
-    def add_command_handler(self, command, handler, permissions=None):
+    def add_command_handler(self, command, handler, permissions=None, plugin=None):
+        handler.__dict__['plugin'] = plugin
         handler.__dict__['permissions'] = permissions
         self.commands[command] = handler
 
@@ -71,7 +72,7 @@ class DyphanBot(discord.Client):
 
     async def process_command(self, message, cmd, args, prefix=False):
         self.logger.info("Got command `%s` with args `%s`", cmd, ' '.join(args))
-        if not prefix and await self.bot_controller._process_command(message, cmd, args):
+        if await self.bot_controller._process_command(message, cmd, args, prefix):
             return None
         if cmd in self.commands:
             # handle commands disabled by the guild settings
@@ -113,6 +114,9 @@ class DyphanBot(discord.Client):
         cmd_handler = None
         prefix = self.bot_controller._get_prefix(message.guild)
         full_cmd, args = utils.parse_command(self, message, prefix)
+        if len(full_cmd) < 1:
+            # don't process if there's no command (happens when bot gets mentioned without a command or only the prefix was sent)
+            return
         if self.bot_mention(message) in message.content:
             cmd_handler = await self.process_command(message, full_cmd[0], args)
         elif prefix and message.content.startswith(prefix):

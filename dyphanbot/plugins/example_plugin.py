@@ -1,4 +1,5 @@
 import random
+import discord
 
 from dyphanbot import Plugin
 
@@ -26,6 +27,24 @@ class ExamplePlugin(Plugin):
 
     def start(self):
         self.logger.info("Example Plugin started!")
+    
+    async def help(self, message, args):
+        return {
+            "title": "Hello World",
+            "helptext": "A plugin created to demonstrate DyphanBot's plugin structure.",
+            "shorthelp": "A simple example plugin.",
+            "color": discord.Colour(0x00FF00),
+            "sections": [
+                {
+                    "name": "What do I do?",
+                    "value": "Responds to `i luv u` and a few other easter eggs, greets you, and accepts head pats!"
+                },
+                {
+                    "name": "My Commands",
+                    "value": "`hello`: Responds with a greeting.\n`headpat`: Accepts a head pat."
+                }
+            ]
+        }
 
     @Plugin.on_ready
     async def ready(self, client):

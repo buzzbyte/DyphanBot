@@ -420,7 +420,7 @@ class ExtensionLoader(Plugin):
         ext_args = mentionless.partition(cmd)[2].strip()
         await message.channel.send(**self.extloader.call(message, cmd, ext_args))
 
-    async def help(self, client, message, args):
+    async def ext_help(self, client, message, args):
         """ Sends back the requested extension's help embed, if an extension
             was provided; otherwise sends command help message.
         """
@@ -451,7 +451,9 @@ class ExtensionLoader(Plugin):
         if not parsed_cmd:
             return
         cmd, args = parsed_cmd
-        if cmd[0] in self.reserved_cmds:
+        if cmd[0].strip() == 'help':
+            await self.ext_help(client, message, args)
+        elif cmd[0] in self.reserved_cmds:
             await getattr(self, cmd[0], self._reserved)(client, message, args)
         else:
             await self.call(client, message, cmd)

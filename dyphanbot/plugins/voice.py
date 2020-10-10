@@ -52,12 +52,15 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 date = None
 
         self.upload_date = date
-
+    
+    '''
     def __getitem__(self, item: str):
         """Allows us to access attributes similar to a dict.
         This is only useful when you are NOT downloading.
         """
+        print("YTDLSource.__getitem__(item= {} )".format(item))
         return self.__getattribute__(item)
+    '''
 
 class MusicPlayer(object):
     """ Handles fetching and parsing media from URLs using youtube-dl, as well
@@ -473,6 +476,53 @@ class Voice(Plugin):
     def __init__(self, dyphanbot):
         super().__init__(dyphanbot)
         self.music = Music(dyphanbot)
+    
+    async def help(self, message, args):
+        prefix = self.get_local_prefix(message)
+        return {
+            "helptext": """Connects to a voice channel and plays audio.
+            Supports playing from YouTube and various other sites, as well as any file format FFMPEG supports.
+            See the [list of supported sites](https://ytdl-org.github.io/youtube-dl/supportedsites.html) for all the sites this plugin can play from.""",
+            "shorthelp": "Plays audio in voice channels.",
+            "sections": [{
+                "name": "> {0}voice join".format(prefix),
+                "value": "Joins the voice channel the user is in.",
+                "inline": False
+            }, {
+                "name": "> {0}voice play `URL or search query`".format(prefix),
+                "value": "Joins and plays a URL or searches YouTube. Resumes a paused audio if called by itself.",
+                "inline": False
+            }, {
+                "name": "> {0}voice pause".format(prefix),
+                "value": "Pauses the currently playing audio.",
+                "inline": False
+            }, {
+                "name": "> {0}voice stop".format(prefix),
+                "value": "Stops playing audio and clears the playlist queue.",
+                "inline": False
+            }, {
+                "name": "> {0}voice volume `up/down/1-100`".format(prefix),
+                "value": "Sets the volume. Can be either up, down, or a number from 1 to 100. Displays the volume if called by itself.",
+                "inline": False
+            }, {
+                "name": "> {0}voice skip".format(prefix),
+                "value": "Skips to the next queued audio source.",
+                "inline": False
+            }, {
+                "name": "> {0}voice status".format(prefix),
+                "value": "Displays the currently playing/paused audio.",
+                "inline": False
+            }, {
+                "name": "> {0}voice queue".format(prefix),
+                "value": "Lists the queued playlist.",
+                "inline": False
+            }, {
+                "name": "> {0}voice leave".format(prefix),
+                "value": "Disconnects from the voice channel.",
+                "inline": False
+            }]
+
+        }
     
     @Plugin.command
     async def voice(self, client, message, args):
