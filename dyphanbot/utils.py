@@ -15,9 +15,19 @@ def truncate(text, limit, ellipsis='...'):
     """Generic function that truncates long text by a specified limit"""
     return text[:limit] + (text[limit:] and ellipsis)
 
+def has_bot_mention(dyphanbot, text):
+    """ Returns True if `text` contains a bot mention, False if otherwise. """
+    bot_uid = dyphanbot.user.id
+    return bool(re.search(rf'<@!?{bot_uid}>', text))
+
+def remove_bot_mention(dyphanbot, text, count=0):
+    """ Removes bot mention from `text` by replacing it with an empty string. """
+    bot_uid = dyphanbot.user.id
+    return re.sub(rf'<@!?{bot_uid}>', "", text, count)
+
 def parse_command(dyphanbot, message, prefix=None, force_prefix=False):
     """ Parse a command message into the command name and arguments """
-    cmd = message.content.replace(dyphanbot.bot_mention(message), "").strip()
+    cmd = remove_bot_mention(dyphanbot, message.content).strip()
     if prefix:
         if force_prefix and not cmd.startswith(prefix):
             return None

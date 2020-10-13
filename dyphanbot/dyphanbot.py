@@ -60,7 +60,7 @@ class DyphanBot(discord.Client):
     def bot_mention(self, msg):
         """Returns a mention string for the bot"""
         server = msg.guild
-        return '{0.mention}'.format(server.me if server is not None else self.user)
+        return '{0.mention}'.format(server.me if server else self.user)
 
     def get_avatar_url(self):
         """Returns a URL for the bot's avatar"""
@@ -117,7 +117,7 @@ class DyphanBot(discord.Client):
         if len(full_cmd) < 1:
             # don't process if there's no command (happens when bot gets mentioned without a command or only the prefix was sent)
             return
-        if self.bot_mention(message) in message.content:
+        if self.user.mentioned_in(message) or (message.guild and message.guild.me.mentioned_in(message)):
             cmd_handler = await self.process_command(message, full_cmd[0], args)
         elif prefix and message.content.startswith(prefix):
             cmd_handler = await self.process_command(message, full_cmd[0], args, True)

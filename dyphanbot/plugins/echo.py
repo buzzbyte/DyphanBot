@@ -2,9 +2,9 @@ import io
 import re
 import logging
 import aiohttp
-from pprint import pprint
-
 import discord
+
+import dyphanbot.utils as utils
 from dyphanbot import Plugin
 
 class Echo(Plugin):
@@ -32,15 +32,13 @@ class Echo(Plugin):
     
     @Plugin.command(botmaster=True)
     async def echo(self, client, message, args):
-        #inputtext = " ".join(args)
-        inputtext = message.content.replace(self.dyphanbot.bot_mention(message), "", 1).strip()
+        inputtext = utils.remove_bot_mention(self.dyphanbot, message.content, 1).strip()
         inputtext = inputtext.partition(" ")[2]
         await message.channel.send(inputtext)
 
     @Plugin.command
     async def bigmoji(self, client, message, args):
         inputtext = " ".join(args)
-        #pprint(message.guild.emojis)
         emoji = self.find_emoji(client, message, inputtext)
         if emoji:
             data = await self.get_bytes_from_url(str(emoji.url))
@@ -51,7 +49,6 @@ class Echo(Plugin):
     @Plugin.command
     async def emoji(self, client, message, args):
         inputtext = " ".join(args)
-        #pprint(message.guild.emojis)
         await self.send_emoji(client, message, inputtext)
     
     @Plugin.on_message(raw=True)
