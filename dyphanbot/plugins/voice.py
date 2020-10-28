@@ -16,6 +16,11 @@ try: # prefer youtube_dlc as it's updated more often
 except ImportError:
     import youtube_dl
 
+HELP_TEXT = """*aliases: `voice`, `audio`, `music`, `m`*
+Connects to a voice channel and plays audio.
+Supports playing from YouTube and various other sites, as well as any file format FFMPEG supports.
+See the [list of supported sites](https://revive-ytdl.github.io/youtube-dl/supportedsites.html) for all the sites this plugin can play from."""
+
 YTDL_OPTS = {
     'format': 'webm[abr>0]/bestaudio/best',
     'prefer_ffmpeg': True,
@@ -51,25 +56,23 @@ class YTDLPlaylist(YTDLObject):
         self.extractor = data.get('extractor')
         self.extractor_key = data.get('extractor_key')
     
-    async def _get_video_id_from_url(self):
+    def _get_video_id_from_url(self):
         # a 'hacky' way to get videos with playlists to start from the current
         # video instead of the beginning of the playlist
         video_opts = {'noplaylist':True, 'ignoreerrors':True}
-        to_run = partial(
-            youtube_dl.YoutubeDL(video_opts).extract_info,
+        video_info = youtube_dl.YoutubeDL(video_opts).extract_info(
             url=self.web_url,
             download=False,
             process=False)
-        video_info = await self.loop.run_in_executor(None, to_run)
-        if 'playlist' in video_info.get('_type', '') or video_info.get('id') == self.id:
+        if not video_info or 'playlist' in video_info.get('_type', '') or video_info.get('id') == self.id:
             return None # url is actually a playlist instead of a video in a playlist
         return video_info.get('id')
     
-    async def entries(self):
+    def entries(self):
         """ Generates a list of YTDLPlaylistEntry objects to be processed later """
         entries = []
         found = False
-        v_id = await self._get_video_id_from_url()
+        v_id = self._get_video_id_from_url()
         for i, entry in enumerate(self._entries, 1):
             if v_id and v_id != entry.get('id') and not found:
                 continue # skip till we get to the current id
@@ -88,10 +91,11 @@ class YTDLPlaylistEntry(YTDLObject):
         self.playlist_index = index
         self.requester = requester
     
-    def process(self):
+    async def process(self):
         """ Processes this playlist entry into a YTDLEntry """
-        entry_result = ytdl.process_ie_result(
-            self._data,
+        to_run = partial(
+            ytdl.process_ie_result,
+            ie_result=self._data,
             download=False,
             extra_info={
                 'playlist': self.playlist._data,
@@ -106,6 +110,7 @@ class YTDLPlaylistEntry(YTDLObject):
                 'extractor_key': self.playlist.extractor_key,
             }
         )
+        entry_result = await self.loop.run_in_executor(None, to_run)
         if not entry_result:
             return None
         return YTDLEntry(entry_result, self.requester, loop=self.loop)
@@ -174,7 +179,8 @@ class MusicPlayer(object):
     as the playlist queue.
     """
     def __init__(self, client: discord.Client, message: discord.Message):
-        self.logger = logging.getLogger(__name__)
+        self._logger = logging.getLogger(__name__)
+        self._dead = False
         self.client = client
         self.message = message
         self.guild = message.guild
@@ -201,6 +207,7 @@ class MusicPlayer(object):
             if message.author == self.client.user:
                 return await message.edit(**kwargs)
             return await message.channel.send(*args, **kwargs)
+        return None
     
     async def _process_data(self, data, depth=0):
         # Processes the data until data['_type'] is either 'video' or 'playlist'
@@ -245,8 +252,11 @@ class MusicPlayer(object):
 
     async def prepare_entries(self, message, search: str, *, custom_data={}, silent=False):
         msg = await self._send_message(message, silent, "Preparing requested source(s)...")
-        to_run = partial(ytdl.extract_info, url=search, download=False, process=False)
-        data = await self.loop.run_in_executor(None, to_run)
+        try:
+            to_run = partial(ytdl.extract_info, url=search, download=False, process=False)
+            data = await self.loop.run_in_executor(None, to_run)
+        except youtube_dl.utils.YoutubeDLError:
+            return await self._send_message(msg, silent, content="Unable to retrieve content... :c")
 
         # Process the result till we get a playlist or a video
         data = await self._process_data(data)
@@ -257,11 +267,13 @@ class MusicPlayer(object):
         # entry and queue it.
         if 'entries' in data:
             playlist = YTDLPlaylist(data, message.author, loop=self.loop)
+            loading_notice = "\nThis might take a while depending on the playlist size." if playlist.title else ""
             fpname = " from `{}`".format(playlist.title) if playlist.title else ""
-            await self._send_message(msg, silent, content="Queuing playlist entries{}...".format(fpname))
+            await self._send_message(msg, silent, content="Queuing playlist entries{}...{}".format(fpname, loading_notice))
             entry_count = 0
             last_entry = None
-            for entry in await playlist.entries():
+            entries = await self.loop.run_in_executor(None, playlist.entries)
+            for entry in entries:
                 await self.queue.put(entry)
                 last_entry = entry
                 entry_count += 1
@@ -323,21 +335,18 @@ class MusicPlayer(object):
     def play_finalize(self, error):
         """ Called after VoiceClient finishes playing source or error occured """
         if error:
-            self.logger.error("%s: %s", type(error).__name__, error)
+            self._logger.error("%s: %s", type(error).__name__, error)
         return self.loop.call_soon_threadsafe(self.next.set)
 
     async def get_queued_source(self):
         """ Gets next queued entry, processes it, and returns its source """
         source = None
 
-        try:
-            async with timeout(300): # 5 minutes
-                entry = await self.queue.get()
-        except asyncio.TimeoutError:
-            return await self.destroy()
+        async with timeout(300): # 5 minutes
+            entry = await self.queue.get()
 
         if isinstance(entry, YTDLPlaylistEntry):
-            entry = entry.process()
+            entry = await entry.process()
         
         if isinstance(entry, YTDLEntry):
             source = await entry.regather_source()
@@ -348,13 +357,15 @@ class MusicPlayer(object):
         """ Main player loop """
         await self.client.wait_until_ready()
 
-        while self.vclient and self.vclient.is_connected():
+        while not self.client.is_closed():
             self.next.clear()
 
             source = self.next_source
             if not source:
                 try:
                     source = await self.get_queued_source()
+                except asyncio.TimeoutError:
+                    return await self.destroy()
                 except Exception  as e:
                     await self.channel.send("There was an error processing your requested audio source...```py\n{}: {}\n```".format(type(e).__name__, e))
                     continue
@@ -437,6 +448,7 @@ class MusicPlayer(object):
         """ Uninitializes this player (basically disconnects from voice and
         clears the queue).
         """
+        self._dead = True
         return await self.cleanup()
 
 class Music(object):
@@ -450,13 +462,23 @@ class Music(object):
 
     def get_player(self, client, message):
         """Retrieve the guild player, or generate one."""
-        try:
-            player = self.players[message.guild.id]
-        except KeyError:
-            player = MusicPlayer(client, message)
-            self.players[message.guild.id] = player
+        guild_id = message.guild.id
+        if guild_id in self.players and not self.players[guild_id]._dead:
+            return self.players[guild_id]
+        
+        player = MusicPlayer(client, message)
+        self.players[message.guild.id] = player
 
         return player
+    
+    async def stab_player_to_death(self, guild: discord.Guild): # cause 'kill' sounds boring
+        """ Kills the music player... obviously. """
+        guild_id = guild.id
+        if guild_id in self.players:
+            player = self.players[guild_id]
+            await player.destroy()
+            player = None
+            del self.players[guild_id]
 
     async def join(self, client, message, args):
         """ Connects to the user's voice channel. """
@@ -620,9 +642,14 @@ class Music(object):
         v_client = message.guild.voice_client
         if not v_client or not v_client.is_connected():
             return await message.channel.send("I'm not connected to a voice channel, bruh...")
-
-        player = self.get_player(client, message)
-        await player.destroy()
+        
+        await self.stab_player_to_death(message.guild)
+    
+    async def reset(self, client, message, args):
+        """ Removes the guild's player to regenerate a new one later """
+        await self.stab_player_to_death(message.guild)
+        await message.channel.send("Reset player. Maybe it works now?")
+    
 
 class Voice(Plugin):
     """ Contains the Voice command which handles the Music sub-commands """
@@ -633,45 +660,45 @@ class Voice(Plugin):
     
     async def help(self, message, args):
         prefix = self.get_local_prefix(message)
+        command = args[0] if args else 'voice'
+        invocation = "{}{}".format(prefix, command)
         return {
-            "helptext": """Connects to a voice channel and plays audio.
-            Supports playing from YouTube and various other sites, as well as any file format FFMPEG supports.
-            See the [list of supported sites](https://ytdl-org.github.io/youtube-dl/supportedsites.html) for all the sites this plugin can play from.""",
+            "helptext": HELP_TEXT,
             "shorthelp": "Plays audio in voice channels.",
             "sections": [{
-                "name": "> {0}voice join".format(prefix),
+                "name": "> {} join".format(invocation),
                 "value": "Joins the voice channel the user is in.",
                 "inline": False
             }, {
-                "name": "> {0}voice play `URL or search query`".format(prefix),
+                "name": "> {} play `URL or search query`".format(invocation),
                 "value": "Joins and plays a URL or searches YouTube. Resumes a paused audio if called by itself.",
                 "inline": False
             }, {
-                "name": "> {0}voice pause".format(prefix),
+                "name": "> {} pause".format(invocation),
                 "value": "Pauses the currently playing audio.",
                 "inline": False
             }, {
-                "name": "> {0}voice stop".format(prefix),
+                "name": "> {} stop".format(invocation),
                 "value": "Stops playing audio and clears the playlist queue.",
                 "inline": False
             }, {
-                "name": "> {0}voice volume `up/down/1-100`".format(prefix),
+                "name": "> {} volume `up/down/1-100`".format(invocation),
                 "value": "Sets the volume. Can be either up, down, or a number from 1 to 100. Displays the volume if called by itself.",
                 "inline": False
             }, {
-                "name": "> {0}voice skip".format(prefix),
+                "name": "> {} skip".format(invocation),
                 "value": "Skips to the next queued audio source.",
                 "inline": False
             }, {
-                "name": "> {0}voice status".format(prefix),
+                "name": "> {} status".format(invocation),
                 "value": "Displays the currently playing/paused audio.",
                 "inline": False
             }, {
-                "name": "> {0}voice queue".format(prefix),
+                "name": "> {} queue".format(invocation),
                 "value": "Lists the queued playlist.",
                 "inline": False
             }, {
-                "name": "> {0}voice leave".format(prefix),
+                "name": "> {} leave".format(invocation),
                 "value": "Disconnects from the voice channel.",
                 "inline": False
             }]
@@ -679,12 +706,12 @@ class Voice(Plugin):
         }
     
     @Plugin.command
-    async def voice(self, client, message, args):
+    async def voice(self, client, message, args, _cmd='voice'):
         """ The Voice command.
         Handles subcommands for playing and controlling audio.
         """
         sub_cmds = ['join', 'play', 'fplay', 'pause', 'stop', 'playlist',
-                    'volume', 'skip', 'status', 'queue', 'leave']
+                    'volume', 'skip', 'status', 'queue', 'leave', 'reset']
 
         if len(args) > 0:
             scmd = args[0].strip()
@@ -692,7 +719,21 @@ class Voice(Plugin):
                 if not hasattr(self.music, scmd):
                     return await message.channel.send("Not implemented yet...")
                 await getattr(self.music, scmd)(client, message, args[1:])
+            elif scmd == 'help':
+                await self.dyphanbot.bot_controller.help(message, [_cmd])
             else:
                 await message.channel.send("lol wut?")
         else:
             await message.channel.send("La la la!!")
+    
+    @Plugin.command
+    async def audio(self, client, message, args):
+        return await self.voice(client, message, args, _cmd='audio')
+    
+    @Plugin.command(cmd='music')
+    async def music_cmd(self, client, message, args):
+        return await self.voice(client, message, args, _cmd='music')
+    
+    @Plugin.command(cmd='m')
+    async def m_cmd(self, client, message, args):
+        return await self.voice(client, message, args, _cmd='m')
