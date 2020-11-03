@@ -59,6 +59,8 @@ class YTDLPlaylist(YTDLObject):
     def _get_video_id_from_url(self):
         # a 'hacky' way to get videos with playlists to start from the current
         # video instead of the beginning of the playlist
+        if not self.web_url:
+            return None
         video_opts = {'noplaylist':True, 'ignoreerrors':True}
         video_info = youtube_dl.YoutubeDL(video_opts).extract_info(
             url=self.web_url,
@@ -77,7 +79,8 @@ class YTDLPlaylist(YTDLObject):
             if v_id and v_id != entry.get('id') and not found:
                 continue # skip till we get to the current id
             found = True # we found the video, stop skipping and add the rest
-            entries.append(YTDLPlaylistEntry(self, entry, self.requester, index=i, loop=self.loop))
+            entries.append(YTDLPlaylistEntry(self, entry, self.requester,
+                index=i, loop=self.loop))
         return entries
 
 class YTDLPlaylistEntry(YTDLObject):
@@ -93,22 +96,31 @@ class YTDLPlaylistEntry(YTDLObject):
     
     async def process(self):
         """ Processes this playlist entry into a YTDLEntry """
+        if 'on_process' in self._data:
+            data = self._data['on_process']()
+            if data.get('_complete'):
+                return YTDLEntry(data, self.requester, loop=self.loop)
+            self._data.update(data)
+        weburl_base = None
+        if self.playlist.web_url:
+            weburl_base = youtube_dl.utils.url_basename(self.playlist.web_url)
+        extra_info = {
+            'playlist': self.playlist._data,
+            'playlist_id': self.playlist.id,
+            'playlist_title': self.playlist.title,
+            'playlist_uploader': self.playlist.uploader,
+            'playlist_uploader_id': self.playlist.uploader_id,
+            'playlist_index': self.playlist_index,
+            'webpage_url': self.playlist.web_url,
+            'webpage_url_basename': weburl_base,
+            'extractor': self.playlist.extractor,
+            'extractor_key': self.playlist.extractor_key,
+        }
         to_run = partial(
             ytdl.process_ie_result,
             ie_result=self._data,
             download=False,
-            extra_info={
-                'playlist': self.playlist._data,
-                'playlist_id': self.playlist.id,
-                'playlist_title': self.playlist.title,
-                'playlist_uploader': self.playlist.uploader,
-                'playlist_uploader_id': self.playlist.uploader_id,
-                'playlist_index': self.playlist_index,
-                'webpage_url': self.playlist.web_url,
-                'webpage_url_basename': youtube_dl.utils.url_basename(self.playlist.web_url),
-                'extractor': self.playlist.extractor,
-                'extractor_key': self.playlist.extractor_key,
-            }
+            extra_info={k: v for k, v in extra_info.items() if v}
         )
         entry_result = await self.loop.run_in_executor(None, to_run)
         if not entry_result:
@@ -122,7 +134,7 @@ class YTDLEntry(YTDLObject):
         self.requester = requester
 
         self._data = data
-        self.custom_data = custom_data
+        self._custom_data = custom_data
         self._update_data(data, custom_data)
     
     def _update_data(self, data: dict, custom_data={}):
@@ -155,9 +167,15 @@ class YTDLEntry(YTDLObject):
         return YTDLSource(discord.FFmpegPCMAudio(ytdl.prepare_filename(self._data), **FFMPEG_OPTS), entry=self)
     
     async def regather_source(self):
+        if 'on_regather' in self._data:
+            regathered_data = self._data['on_regather']()
+            self._update_data(self._data, regathered_data)
+            return YTDLSource(discord.FFmpegPCMAudio(self._data['url'], **FFMPEG_OPTS), entry=self)
         to_run = partial(ytdl.extract_info, url=self.web_url, download=False)
         regathered_data = await self.loop.run_in_executor(None, to_run)
-        regathered_data.update(self.custom_data)
+        if self._data.get('_custom_playlist'):
+            self._custom_data = self._data
+        regathered_data.update(self._custom_data)
         self._update_data(self._data, regathered_data)
         return YTDLSource(discord.FFmpegPCMAudio(self._data['url'], **FFMPEG_OPTS), entry=self)
 
@@ -249,17 +267,65 @@ class MusicPlayer(object):
             return new_data # we've gone too deep...
         else:
             return data
+    
+    async def _generate_playlist_data(self, message, data: dict, silent=False):
+        if not 'entries' in data:
+            return None
+        new_data = {
+            '_type': 'playlist',
+            'id': data.get('id', "custom-playlist"),
+            'title': data.get('title', "Untitled Custom Playlist"),
+            'entries': []
+        }
 
-    async def prepare_entries(self, message, search: str, *, custom_data={}, silent=False):
+        for entry in data['entries']:
+            if 'url' in entry:
+                try:
+                    to_run = partial(ytdl.extract_info, url=entry['url'], download=False, process=False)
+                    entry_info = await self.loop.run_in_executor(None, to_run)
+                    if entry_info.get('_type') == 'playlist':
+                        # too much hassle in handling playlists inside of each other
+                        continue
+                    if 'data' in entry:
+                        entry_info.update(entry['data'])
+                    entry_info['_custom_playlist'] = True
+                    new_data['entries'].append(entry_info)
+                except youtube_dl.utils.YoutubeDLError:
+                    await self._send_message(message, silent,
+                        content="Skipped `{}` due to an error.".format(
+                            entry.get('data', {}).get('title', entry['url'])))
+                    continue
+            elif 'id' in entry:
+                entry_info = {}
+                entry_info['id'] = entry['id']
+                if 'data' in entry:
+                    entry_info.update(entry['data'])
+                new_data['entries'].append(entry_info)
+        
+        return new_data
+
+    async def prepare_entries(self, message, search, *, custom_data={}, silent=False):
         msg = await self._send_message(message, silent, "Preparing requested source(s)...")
-        try:
-            to_run = partial(ytdl.extract_info, url=search, download=False, process=False)
-            data = await self.loop.run_in_executor(None, to_run)
-        except youtube_dl.utils.YoutubeDLError:
-            return await self._send_message(msg, silent, content="Unable to retrieve content... :c")
-
-        # Process the result till we get a playlist or a video
-        data = await self._process_data(data)
+        if isinstance(search, dict):
+            data = await self._generate_playlist_data(message, search, silent)
+            if not data:
+                self._logger.error(
+                    "Custom playlist data missing required values.")
+                return await self._send_message(msg, silent,
+                    content="Unable to generate playlist... :c")
+            if not data['entries']:
+                return await self._send_message(msg, silent,
+                    content="The playlist is empty... :c")
+        else:
+            try:
+                to_run = partial(ytdl.extract_info, url=search, download=False, process=False)
+                data = await self.loop.run_in_executor(None, to_run)
+                
+                # Process the result till we get a playlist or a video
+                data = await self._process_data(data)
+            except youtube_dl.utils.YoutubeDLError:
+                return await self._send_message(msg, silent,
+                    content="Unable to retrieve content... :c")
 
         # If it's a playlist with more than one video, put it in a YTDLPlaylist
         # object and queue them as playlist entries to process them in the
@@ -292,8 +358,8 @@ class MusicPlayer(object):
         embed = discord.Embed(
             title=source.title,
             colour=discord.Colour(0x7289DA),
-            url=source.web_url,
-            description=textwrap.shorten(source.description, 157, placeholder="..."),
+            url=source.web_url if not source.entry._data.get('no_url') else discord.Embed.Empty,
+            description=source.description if source.entry._data.get('full_desc') else textwrap.shorten(source.description, 157, placeholder="..."),
             timestamp=self.message.created_at
         )
 
@@ -325,7 +391,7 @@ class MusicPlayer(object):
         embed = discord.Embed(
             title=source.title,
             colour=discord.Colour(0x7289DA),
-            url=source.web_url
+            url=source.web_url if not source.entry._data.get('no_url') else discord.Embed.Empty,
         )
 
         embed.set_author(name="Played")
@@ -336,14 +402,18 @@ class MusicPlayer(object):
         """ Called after VoiceClient finishes playing source or error occured """
         if error:
             self._logger.error("%s: %s", type(error).__name__, error)
+        
         return self.loop.call_soon_threadsafe(self.next.set)
 
-    async def get_queued_source(self):
+    async def get_queued_source(self, wait_for_queue=True):
         """ Gets next queued entry, processes it, and returns its source """
         source = None
 
-        async with timeout(300): # 5 minutes
-            entry = await self.queue.get()
+        if wait_for_queue:
+            async with timeout(300): # 5 minutes
+                entry = await self.queue.get()
+        else:
+            entry = self.queue.get_nowait()
 
         if isinstance(entry, YTDLPlaylistEntry):
             entry = await entry.process()
@@ -374,16 +444,21 @@ class MusicPlayer(object):
                 source.volume = self.volume
                 self.current = source
 
+                if source.entry._data.get('before_playback'):
+                    await source.entry._data['before_playback']()
+                
                 self.vclient.play(source, after=self.play_finalize)
                 await self.update_now_playing()
 
                 try:
-                    self.next_source = await self.get_queued_source()
+                    self.next_source = await self.get_queued_source(wait_for_queue=False)
                 except Exception  as e:
                     # we'll get 'em next time...
                     self.next_source = None
-
+                
                 await self.next.wait()
+                if source.entry._data.get('after_playback'):
+                    await source.entry._data['after_playback']()
 
                 await self.update_last_playing(source)
                 source.cleanup()
@@ -433,6 +508,8 @@ class MusicPlayer(object):
         if self.next_source:
             self.next_source.cleanup()
         self.next_source = None
+        if self.vclient.is_paused():
+            self.vclient.resume()
         self.vclient.stop()
         self.clear_queue()
 
@@ -500,7 +577,10 @@ class Music(object):
         This will also call `join` if the bot is not already connected to a
         voice channel.
         """
-        song = " ".join(args)
+        if isinstance(args, list):
+            song = " ".join(args)
+        else:
+            song = args
 
         v_client = message.guild.voice_client
         if not v_client:
@@ -509,7 +589,7 @@ class Music(object):
                 return
 
         player = self.get_player(client, message)
-        if song.strip() == "":
+        if isinstance(song, str) and song.strip() == "":
             if v_client.is_paused():
                 v_client.resume()
                 if player.current:
