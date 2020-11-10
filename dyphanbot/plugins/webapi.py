@@ -46,17 +46,89 @@ class WebAPI(object):
                 return True
         return False
 
-    async def default(self, ws, session):
+    async def default(self, ws, session, params={}):
         return ws._error_dict("Unknown action")
 
     async def user(self, ws, session, params={}):
-        return session.get(API_BASE_URL + '/users/@me').json()
+        return { "status": "success", "user": session.get(API_BASE_URL + '/users/@me').json() }
 
     async def guilds(self, ws, session, params={}):
-        return session.get(API_BASE_URL + '/users/@me/guilds').json()
+        return { "status": "success", "user_guilds": session.get(API_BASE_URL + '/users/@me/guilds').json() }
 
     async def connections(self, ws, session, params={}):
-        return session.get(API_BASE_URL + '/users/@me/connections').json()
+        return { "status": "success", "user_connections": session.get(API_BASE_URL + '/users/@me/connections').json() }
+    
+    async def bot_info(self, ws, session, params={}):
+        botuser = self.dyphanbot.user
+        return {"status": "success", "bot_info": {
+            "id": str(botuser.id),
+            "name": botuser.name,
+            "discriminator": botuser.discriminator,
+            "display_name": botuser.display_name,
+            "avatar": botuser.avatar,
+            "avatar_url": str(botuser.avatar_url),
+            "color": str(botuser.color),
+            "bot": botuser.bot
+        }}
+    
+    async def shared_guilds(self, ws, session, params={}):
+        user_guilds = await self.guilds(ws, session)
+        bot_guilds = [str(x.id) for x in self.dyphanbot.guilds]
+        shared_guilds = []
+        for uguild in user_guilds:
+            if str(uguild.get("id")) in bot_guilds:
+                shared_guilds.append({
+                    "features": uguild.get("features"),
+                    "name": uguild.get("name"),
+                    "owner": uguild.get("owner"),
+                    "icon": uguild.get("icon"),
+                    "id": str(uguild.get("id")),
+                    "user_permissions": str(uguild.get("permissions")),
+                    "bot_permissions": str(self.dyphanbot.get_guild(int(uguild.get("id"))).me.guild_permissions.value)
+                })
+        return { "status": "success", "shared_guilds": shared_guilds }
+
+    async def bot_guilds(self, ws, session, params={}):
+        if not await self._is_user_bot_master(ws, session):
+            return ws._error_dict("Not logged in as a bot master.")
+        bot_guilds = []
+        for guild in self.dyphanbot.guilds:
+            bot_guilds.append({
+                "features": guild.features,
+                "name": guild.name,
+                "owner_id": str(guild.owner.id),
+                "icon": guild.icon,
+                "id": str(guild.id),
+                "permissions": str(guild.me.guild_permissions.value)
+            })
+        return { "status": "success", "bot_guilds": bot_guilds }
+    
+    async def get_plugins(self, ws, session, params={}):
+        if not await self._is_user_bot_master(ws, session):
+            return ws._error_dict("Not logged in as a bot master.")
+        pluginlist = self.dyphanbot.pluginloader.get_plugins().keys()
+        return { "status": "success", "plugins": list(pluginlist) }
+    
+    async def get_plugin(self, ws, session, params):
+        if not await self._is_user_bot_master(ws, session):
+            return ws._error_dict("Not logged in as a bot master.")
+        if not await self._require_params(ws, ['plugin'], params):
+            return
+        plugin = self.dyphanbot.pluginloader.get_plugins().get(params["plugin"])
+        if not plugin:
+            return ws._error_dict("Plugin does not exist.")
+        return { "status": "success", "plugin": dir(plugin) }
+    
+    async def guild_settings(self, ws, session, params):
+        if not await self._require_params(ws, ['guild_id'], params):
+            return
+        shared_guilds = await self.shared_guilds(ws,session)
+        if params["guild_id"] not in [x["id"] for x in shared_guilds.get("shared_guilds", [])] and not await self._is_user_bot_master(ws, session):
+            return ws._error_dict("Not logged in as a bot master.")
+        guild_settings = self.dyphanbot.bot_controller._get_settings_for_guild(self.dyphanbot.get_guild(int(params["guild_id"])))
+        if not guild_settings:
+            return ws._error_dict("No settings found for this guild.")
+        return { "status": "success", "guild_settings": guild_settings }
 
     async def send_message(self, ws, session, params):
         if not await self._require_params(ws, ['channel_id', 'message'], params):
@@ -115,7 +187,7 @@ class WebAPI(object):
             guild.voice_client.stop()
         elif action in "get":
             if guild.voice_client.source:
-                title = guild.voice_client.source.title if 'title' in guild.voice_client.source else "Untitled"
+                title = guild.voice_client.source.title if "YTDLSource" in guild.voice_client.source.__class__.__name__ else "Untitled"
                 return { "status": "success", "title": title, "is_playing": guild.voice_client.is_playing() }
         else:
             return ws._error_dict("Unimplemented")
@@ -257,5 +329,7 @@ class DyBotServer(object):
         return self.dyphanbot.data.load_json(self.config_fn, self.initial_config, self._save_config)
 
 def plugin_init(dyphanbot):
-    dybotserver = DyBotServer(dyphanbot)
+    # Not ready for that just yet...
+    #dybotserver = DyBotServer(dyphanbot)
     #dybotserver.run()
+    pass
