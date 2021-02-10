@@ -20,16 +20,23 @@ class DyphanBot(discord.Client):
     Main class for DyphanBot
     """
     def __init__(self, debug=False, config_path=None):
-        super().__init__()
         self.logger = logging.getLogger(__name__)
         if debug:
             logging.getLogger("dyphanbot").setLevel(logging.DEBUG)
+        
+        self.setup(config_path)
+        super().__init__(intents=self._intents)
+    
+    def setup(self, config_path):
+        """ Initializes core DyphanBot components and loads plugins """
         self.data = DataManager(self, config_path)
         self.bot_controller = BotController(self)
         self.pluginloader = PluginLoader(self,
             disabled_plugins=self.data._get_key('disabled_plugins', []),
             user_plugin_dirs=self.data._get_key('plugin_dirs', []))
-
+        
+        self._intents = discord.Intents.default()
+        
         self.commands = {}
 
         # TODO: make this into one dict with all the handlers
@@ -37,8 +44,19 @@ class DyphanBot(discord.Client):
         self.ready_handlers = []
         self.mjoin_handlers = []
 
-    def run(self):
         self.pluginloader.load_plugins()
+
+        # config overrides plugin intents
+        for intent, val in self.data._get_key('intents', {}).items():
+            if intent in discord.Intents.VALID_FLAGS and isinstance(val, bool):
+                setattr(self._intents, intent, val)
+            else:
+                self.logger.warn(
+                    "Skipping invalid configuration for intent `{}` "
+                    "with value `{}` (must be valid intent with boolean value)"
+                    .format(intent, val))
+
+    def run(self):
         super().run(self.data._get_key('token'), bot=self.data._get_key('bot', True))
 
     def add_command_handler(self, command, handler, permissions=None, plugin=None):
@@ -100,6 +118,10 @@ class DyphanBot(discord.Client):
         for handler in self.ready_handlers:
             await handler(self)
         self.logger.info("Initializing %s (%s) running %s", self.user.name, self.user.id, CB_NAME)
+
+        intents = dict(iter(self.intents))
+        self.logger.info("Enabled intents: {}".format(' '.join([x for x in intents if intents[x]])))
+        self.logger.info("Disabled intents: {}".format(' '.join([x for x in intents if not intents[x]])))
     
     async def on_member_join(self, member):
         for handler in self.mjoin_handlers:

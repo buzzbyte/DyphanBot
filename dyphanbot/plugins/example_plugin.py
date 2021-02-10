@@ -27,6 +27,7 @@ class ExamplePlugin(Plugin):
 
     def start(self):
         self.logger.info("Example Plugin started!")
+        self.intents.members = True
     
     async def help(self, message, args):
         return {

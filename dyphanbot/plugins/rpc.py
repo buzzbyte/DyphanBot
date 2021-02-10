@@ -27,5 +27,6 @@ async def run_server(dyphanbot):
     server = await asyncio.start_server(rpc_serv, host="localhost", port=18002)
 
 def plugin_init(dyphanbot):
-    loop = dyphanbot.loop
-    loop.run_until_complete(run_server(dyphanbot))
+    #loop = dyphanbot.loop
+    #loop.run_until_complete(run_server(dyphanbot))
+    pass

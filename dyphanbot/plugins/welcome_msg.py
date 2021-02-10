@@ -141,6 +141,7 @@ class WelcomeMsg(Plugin):
     """ Plugin for guilds to welcome users on join """
 
     def start(self):
+        self.intents.members = True
         self.db_filename = "welcomemsgs"
         self.data = self.load_json(self.db_filename)
     

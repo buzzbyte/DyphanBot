@@ -14,6 +14,7 @@ class Plugin(object):
     def __init__(self, dyphanbot):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.dyphanbot = dyphanbot
+        self.intents = self.dyphanbot._intents
 
         self.logger.info("Initialized plugin: %s", self.__class__.__name__)
         self.start()
