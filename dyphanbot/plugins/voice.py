@@ -1,4 +1,3 @@
-## Rewritten Voice Plugin ##
 import asyncio
 import textwrap
 import datetime
@@ -11,15 +10,12 @@ import discord
 import dyphanbot.utils as utils
 from dyphanbot import Plugin
 
-try: # prefer youtube_dlc as it's updated more often
-    import youtube_dlc as youtube_dl
-except ImportError:
-    import youtube_dl
+import youtube_dl
 
 HELP_TEXT = """*aliases: `voice`, `audio`, `music`, `m`*
 Connects to a voice channel and plays audio.
 Supports playing from YouTube and various other sites, as well as any file format FFMPEG supports.
-See the [list of supported sites](https://revive-ytdl.github.io/youtube-dl/supportedsites.html) for all the sites this plugin can play from."""
+See the [list of supported sites](https://ytdl-org.github.io/youtube-dl/supportedsites.html) for all the sites this plugin can play from."""
 
 YTDL_OPTS = {
     'format': 'webm[abr>0]/bestaudio/best',
