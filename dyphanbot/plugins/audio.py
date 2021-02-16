@@ -12,7 +12,7 @@ from dyphanbot import Plugin
 
 import youtube_dl
 
-HELP_TEXT = """*aliases: `voice`, `audio`, `music`, `m`*
+HELP_TEXT = """*aliases: `audio`, `voice`, `music`, `m`*
 Connects to a voice channel and plays audio.
 Supports playing from YouTube and various other sites, as well as any file format FFMPEG supports.
 See the [list of supported sites](https://ytdl-org.github.io/youtube-dl/supportedsites.html) for all the sites this plugin can play from."""
@@ -727,8 +727,8 @@ class Music(object):
         await message.channel.send("Reset player. Maybe it works now?")
     
 
-class Voice(Plugin):
-    """ Contains the Voice command which handles the Music sub-commands """
+class Audio(Plugin):
+    """ Contains the Audio command which handles the Music sub-commands """
 
     def __init__(self, dyphanbot):
         super().__init__(dyphanbot)
@@ -736,7 +736,7 @@ class Voice(Plugin):
     
     async def help(self, message, args):
         prefix = self.get_local_prefix(message)
-        command = args[0] if args else 'voice'
+        command = args[0] if args else 'audio'
         invocation = "{}{}".format(prefix, command)
         return {
             "helptext": HELP_TEXT,
@@ -782,7 +782,7 @@ class Voice(Plugin):
         }
     
     @Plugin.command
-    async def voice(self, client, message, args, _cmd='voice'):
+    async def audio(self, client, message, args, _cmd='audio'):
         """ The Voice command.
         Handles subcommands for playing and controlling audio.
         """
@@ -803,13 +803,13 @@ class Voice(Plugin):
             await message.channel.send("La la la!!")
     
     @Plugin.command
-    async def audio(self, client, message, args):
-        return await self.voice(client, message, args, _cmd='audio')
+    async def voice(self, client, message, args):
+        return await self.audio(client, message, args, _cmd='voice')
     
     @Plugin.command(cmd='music')
     async def music_cmd(self, client, message, args):
-        return await self.voice(client, message, args, _cmd='music')
+        return await self.audio(client, message, args, _cmd='music')
     
     @Plugin.command(cmd='m')
     async def m_cmd(self, client, message, args):
-        return await self.voice(client, message, args, _cmd='m')
+        return await self.audio(client, message, args, _cmd='m')

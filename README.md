@@ -16,7 +16,7 @@ dependencies, are listed here:
 * **Core**
   * Python >= 3.6
   * [discord.py](https://github.com/Rapptz/discord.py) >= 1.5
-* **Voice**
+* **Audio**
   * discord.py[voice]
   * [youtube-dl](https://github.com/ytdl-org/youtube-dl)
 * **WebAPI (WIP)**
