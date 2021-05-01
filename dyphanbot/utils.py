@@ -44,3 +44,10 @@ def parse_reigon(text, start, end, strip=True):
 def parse_codeblock(text, lang=""):
     lang = "{0}\n".format(lang) if lang else ""
     return parse_reigon(text, "```{}".format(lang), "```")
+
+def secs_to_hms(seconds):
+    """ Returns formatted time in H:MM:SS or M:SS from `seconds`. """
+    min, sec = divmod(int(seconds), 60)
+    hrs, min = divmod(min, 60)
+    dfmtstr = "{0:d}:{1:02d}:{2:02d}" if hrs > 0 else "{1:d}:{2:02d}"
+    return dfmtstr.format(hrs, min, sec)
