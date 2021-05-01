@@ -16,3 +16,6 @@ class InvalidConfigurationError(DyphanBotError):
 
     def __str__(self):
         return "{0}: '{1}'".format(self.message, self.key)
+
+class PluginError(DyphanBotError):
+    """ Raised by plugins """

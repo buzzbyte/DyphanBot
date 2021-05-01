@@ -15,7 +15,7 @@ DyphanBot's core, as well as the built-in plugins that require other
 dependencies, are listed here:
 * **Core**
   * Python >= 3.6
-  * [discord.py](https://github.com/Rapptz/discord.py) >= 1.5
+  * [discord.py](https://github.com/Rapptz/discord.py) >= 1.6
 * **Audio**
   * discord.py[voice]
   * [youtube-dl](https://github.com/ytdl-org/youtube-dl)

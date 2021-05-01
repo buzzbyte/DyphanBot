@@ -19,9 +19,11 @@ class DyphanBot(discord.Client):
     """
     Main class for DyphanBot
     """
-    def __init__(self, debug=False, config_path=None):
+    def __init__(self, config_path=None, **kwargs):
         self.logger = logging.getLogger(__name__)
-        if debug:
+        self.debug = kwargs.get('verbose')
+        self.dev_mode = kwargs.get('dev_mode')
+        if self.debug:
             logging.getLogger("dyphanbot").setLevel(logging.DEBUG)
         
         self.setup(config_path)
@@ -33,7 +35,8 @@ class DyphanBot(discord.Client):
         self.bot_controller = BotController(self)
         self.pluginloader = PluginLoader(self,
             disabled_plugins=self.data._get_key('disabled_plugins', []),
-            user_plugin_dirs=self.data._get_key('plugin_dirs', []))
+            user_plugin_dirs=self.data._get_key('plugin_dirs', []),
+            dev_mode=self.dev_mode)
         
         self._intents = discord.Intents.default()
         
@@ -117,11 +120,12 @@ class DyphanBot(discord.Client):
         self.logger.debug("Found %d ready handlers: %s", len(self.ready_handlers), self.ready_handlers)
         for handler in self.ready_handlers:
             await handler(self)
-        self.logger.info("Initializing %s (%s) running %s", self.user.name, self.user.id, CB_NAME)
 
         intents = dict(iter(self.intents))
-        self.logger.info("Enabled intents: {}".format(' '.join([x for x in intents if intents[x]])))
-        self.logger.info("Disabled intents: {}".format(' '.join([x for x in intents if not intents[x]])))
+        self.logger.info("Enabled intents: %s", ' '.join([x for x in intents if intents[x]]))
+        self.logger.info("Disabled intents: %s", ' '.join([x for x in intents if not intents[x]]))
+
+        self.logger.info("Initialized %s (%s) running %s", self.user.name, self.user.id, CB_NAME)
     
     async def on_member_join(self, member):
         for handler in self.mjoin_handlers:

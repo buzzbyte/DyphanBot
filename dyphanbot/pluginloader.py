@@ -1,34 +1,92 @@
 """ This module contains the PluginLoader class responsible for loading plugins. """
 
 import os
+import sys
 import glob
 import logging
 import functools
 import importlib.util
 
+from importlib.machinery import PathFinder
+
 from dyphanbot.constants import PLUGIN_DIRS
 
 class Plugin(object):
-    """ Superclass for DyphanBot plugins. """
+    """ Superclass for DyphanBot plugins; plugins should subclass from this
+
+    Attributes:
+        dyphanbot (:obj:`dyphanbot.DyphanBot`): The main DyphanBot object
+        intents (:obj:`discord.Intents`): The intents the bot has access to
+    
+    Args:
+        dyphanbot (:obj:`dyphanbot.DyphanBot`): The main DyphanBot object
+    
+    """
 
     def __init__(self, dyphanbot):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.dyphanbot = dyphanbot
         self.intents = self.dyphanbot._intents
 
-        self.logger.info("Initialized plugin: %s", self.__class__.__name__)
+        self.logger.info("Initialized plugin: %s", self.name)
         self.start()
+    
+    @property
+    def name(self):
+        "str: Gets the plugin's name (defaults to class name if not overridden)"
+        return self.__class__.__name__
 
     def start(self):
+        """ Called after main init. Override this instead of `__init__`
+            when subclassing.
+        """
         pass
 
     def load_json(self, filename, initial_data={}, save_json=None, **kwargs):
+        """ Loads JSON file as an object from the plugin's own data directory
+
+        This simply calls the `DataManager.load_json()` method passing the
+        plugin's data directory as a parent to the `filename`. If no file with
+        that filename is found in this directory, it will automatically create
+        a new one initialized with `initial_data` through `save_json` handler,
+        or the default `DataManager.save_json()` if `save_json=None`.
+
+        `**kwargs` are passed to the internal `json.load()` function for
+        extra control.
+
+        Args:
+            filename (str): The filename found in the plugin's data directory
+            initial_data (dict, optional): The default data to initialize a new
+                json file with if none was found. Defaults to {}.
+            save_json (func, optional): A optional save handler used to save a
+                new json file if none was found. Defaults to built-in method.
+
+        Returns:
+            The loaded JSON data as a Python object.
+        
+        """
         return self.dyphanbot.data.load_json(os.path.join(self.__class__.__name__, filename), initial_data, save_json, **kwargs)
 
     def save_json(self, filename, data, **kwargs):
+        """ Save `data` dict as a JSON file to the plugin's own data directory
+
+        `**kwargs` are passed to the internal `json.dump()` function for
+        extra control.
+
+        Args:
+            filename (str): The filename to save as
+            data: The data object to save
+
+        Returns:
+            The saved data object
+        
+        """
         return self.dyphanbot.data.save_json(os.path.join(self.__class__.__name__, filename), data, **kwargs)
     
     def get_local_prefix(self, message):
+        """ Returns the prefix for the guild if assigned, otherwise, returns
+            the bot mention
+        """
         return self.dyphanbot.bot_controller._get_prefix(message.guild) or "{} ".format(self.dyphanbot.bot_mention(message))
     
     async def help(self, message, args):
@@ -52,11 +110,18 @@ class Plugin(object):
                 - unlisted: Whether the plugin should be listed upon calling
                             the `plugins` command (defaults to `False` if this
                             method is overridden).
+        
         """
         return {
             "helptext": "No help provided... :c",
             "unlisted": True
         }
+
+    @staticmethod
+    def event(handler):
+        assert not handler.__name__.startswith('_'), "Handlers must be public"
+        handler.__dict__['event_handler'] = True
+        return handler
 
     @staticmethod
     def on_ready(handler):
@@ -98,24 +163,40 @@ class Plugin(object):
         return handler
 
 class PluginLoader(object):
-    """ Provides methods to help load plugins.
+    """ Handles the loading and importing of plugins from each directory
 
+    Attributes:
+        dyphanbot (:obj:`dyphanbot.DyphanBot`): The main DyphanBot object
+        disabled_plugins (:obj:`list` of :obj:`str`): A list of plugin names
+            to disable
+        plugin_dirs (:obj:`list` of :obj:`str`): A list of paths to
+            plugin directories
+        dev_mode (bool): If true, raises a plugin exception, otherwise skip it
+    
     Args:
-        dyphanbot (:obj:`dyphanbot.DyphanBot`):
-            The main DyphanBot object.
+        dyphanbot (:obj:`dyphanbot.DyphanBot`): The main DyphanBot object
+        disabled_plugins (:obj:`list` of :obj:`str`): A list of plugin names
+            to disable
+        user_plugin_dirs (:obj:`list` of :obj:`str`): A list of user-defined
+            paths to plugin directories (appended to built-in paths)
+        dev_mode (bool): If true, raises a plugin exception, otherwise skip it
 
     """
 
-    def __init__(self, dyphanbot, disabled_plugins=[], user_plugin_dirs=[]):
+    def __init__(self, dyphanbot, disabled_plugins=[], user_plugin_dirs=[], dev_mode=False):
         self.logger = logging.getLogger(__name__)
         self.dyphanbot = dyphanbot
         self.disabled_plugins = disabled_plugins
         self.plugin_dirs = PLUGIN_DIRS + [os.path.expanduser(pdirs) for pdirs in user_plugin_dirs]
+        self.dev_mode = dev_mode
+
         self.plugins = {}
 
     def init_plugins(self):
+        """ Initializes subclassed plugins and registers them """
         plugins = Plugin.__subclasses__()
-        self.logger.debug("Found %d subclassed plugins: %s", len(plugins), plugins)
+        self.logger.debug("Found %d subclassed plugins: %s", len(plugins),
+                          ", ".join([x.__name__ for x in plugins]))
         for plugin in plugins:
             try:
                 plugin_obj = plugin(self.dyphanbot)
@@ -138,83 +219,140 @@ class PluginLoader(object):
                         )
                     elif hasattr(method, "msg_handler") and hasattr(method, "raw"):
                         self.dyphanbot.add_message_handler(real_method, real_method.raw)
+                    elif hasattr(method, "event_handler"):
+                        real_method = self.dyphanbot.event(real_method)
                 self.plugins[plugin.__name__] = plugin_obj
             except Exception as err:
                 self.logger.warning("Unable to load plugin '%s': %s", plugin.__name__, err)
-                raise
-
-        if hasattr(self, 'subclassed_or_not_real_plugins'):
-            del self.subclassed_or_not_real_plugins # delet dis
+                if self.dev_mode:
+                    raise
 
     def load_plugins(self):
-        """ Loads and initializes each plugin in the plugin directories. """
+        """ Iterates through each plugin directory and loads plugins from
+            each directory, then initializes subclassed plugins
+        """
         self.logger.debug("Searching %d plugin directories: %s", len(self.plugin_dirs), self.plugin_dirs)
         for directory in self.plugin_dirs:
             if not os.path.isdir(directory):
                 continue
 
-            self.load_plugin_from_directory(directory)
+            self.load_plugins_from_directory(directory)
         self.init_plugins()
 
-    def load_plugin_from_directory(self, directory):
-        """ Loads and initializes each plugin in the argument directory.
+    def load_plugins_from_directory(self, directory, rpaths=[]):
+        """ Recursively finds and loads each plugin module in the given
+            directory
 
         Args:
             directory (str): The directory to load from.
-
+            rpaths (:obj:`list`, optional): Recursive; A list of additional
+                paths to recursively search plugins in.
+        
         """
-        directory = os.path.join(directory, '**', '[!_]*.py')
+        directory = os.path.join(directory, '[!_.]*[!_.]')
         for plugin_path in glob.glob(directory, recursive=True):
-            self.load_plugin_from_path(plugin_path)
+            if os.path.isdir(plugin_path) and not os.path.isfile(os.path.join(plugin_path, "__init__.py")):
+                # if plugin_path is a directory & it's not a package,
+                # recursively load plugins from that directory
+                rpaths.append(plugin_path)
+                self.load_plugins_from_directory(plugin_path, rpaths)
+                continue
+            
+            basename = os.path.basename(plugin_path)
+            if '.' in basename and not basename.endswith('.py'):
+                # skip non-python filenames
+                continue
+            basename = basename.split('.')[0]
+            if not basename.strip():
+                continue
+            self.load_plugin(basename, rpaths)
+    
+    def load_plugin(self, name, additional_paths=[]):
+        """ Imports and loads a plugin by name
 
-    def load_plugin_from_path(self, path):
-        """ Loads and initializes each plugin from its path.
+        Disabled plugins are skipped and legacy plugins are initialized here.
+        If the plugin is not a legacy plugin, this method just acts as a
+        wrapper around `PluginLoader.import_plugin()`. If `dev_mode` is enabled
+        and an exception was thrown, this raises the exception instead of
+        skipping it with a warning (useful when developing plugins).
 
         Args:
-            path (str): The path to the plugin's python file.
-
+            name (str): The name of the plugin's module to be loaded
+            additional_paths (:obj:`list`, optional): Additional paths to
+                search for the plugin in
+        
         """
-        name = os.path.splitext(os.path.basename(path))[0]
         if name in self.disabled_plugins:
             self.logger.info("Skipped disabled plugin: %s", name)
             return
         try:
-            plugin = import_file(path)
+            plugin = self.import_plugin(name, additional_paths)
+            plogger = logging.getLogger(plugin.__name__)
             if getattr(plugin, "plugin_init", None):
+                plogger.warn("The `plugin_init` hook is deprecated. Subclass from `Plugin` instead.")
+                plugin.name = name
                 plugin.plugin_init(self.dyphanbot)
                 self.plugins[name] = plugin
-                self.logger.info("Loaded plugin: %s", name)
-            else:
-                # this is really dumb, but it's the only way I can get it to
-                # work with subclassed plugins for some reason...
-                if not hasattr(self, 'subclassed_or_not_real_plugins'):
-                    self.subclassed_or_not_real_plugins = {}
-                self.subclassed_or_not_real_plugins[name] = plugin
+                plogger.info("Loaded legacy plugin: %s", name)
         except Exception as err:
             self.logger.warning("Unable to load plugin '%s': %s", name, err)
-            raise
+            if self.dev_mode:
+                raise
+    
+    def import_plugin(self, name, additional_paths=[]):
+        """ Mimics Python's import mechanism to import plugins found in the
+            specified plugin directories; returns the imported plugin module
+        
+        Args:
+            name (str): The name of the plugin's module to be imported
+            additional_paths (:obj:`list`, optional): Additional paths to
+                search for the plugin in
+        
+        Returns:
+            ModuleType: The imported plugin's module
+        
+        Raises:
+            ImportError: If the name cannot be resolved without a package
+                (e.g. a relative import)
+            ModuleNotFoundError: If the name cannot be found in any of the
+                searched directories.
+        
+        """
+        try:
+            abs_name = importlib.util.resolve_name(name, None)
+        except ImportError:
+            raise ImportError(f'Invalid plugin name {name!r}')
+
+        try:
+            # if the plugin is already loaded, return it
+            return self.plugins[abs_name]
+        except KeyError:
+            pass
+        
+        try:
+            # if the plugin is already imported, return it
+            return sys.modules[abs_name]
+        except KeyError:
+            pass
+        
+        search_paths = list(set(self.plugin_dirs + additional_paths))
+        spec = PathFinder.find_spec(abs_name, search_paths)
+        if not spec:
+            raise ModuleNotFoundError(f'No plugin named {abs_name!r}',
+                                      name=abs_name)
+        
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[abs_name] = module
+        spec.loader.exec_module(module)
+        self.logger.debug("Imported plugin: %s", abs_name)
+        return module
 
     def get_plugins(self):
-        """ Returns the loaded plugins.
+        """ Returns the currently loaded plugins.
 
         Returns:
-            dict: The loaded plugin objects.
+            dict: A key-value pair containing each plugin's name and its
+                associated object
 
         """
         return self.plugins
-
-def import_file(path):
-    """ Imports a python file from the path in the argument.
-
-    Args:
-        path (str): The path to the python file to be imported.
-
-    Returns:
-        The imported file as a module.
-
-    """
-    filename = os.path.splitext(os.path.basename(path))[0]
-    spec = importlib.util.spec_from_file_location(filename, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
