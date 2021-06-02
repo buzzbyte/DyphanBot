@@ -72,6 +72,8 @@ class ConfigManager(object):
     def _setup_config(self, config_path=None):
         if not config_path:
             config_path = self._find_config()
+        if not self.data_dir:
+            self.data_dir = os.path.dirname(config_path)
         with open(config_path, 'r+') as fd:
             raw_data = fd.read()
             if raw_data.strip() == "":

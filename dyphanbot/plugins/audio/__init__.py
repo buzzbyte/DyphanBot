@@ -18,12 +18,31 @@ class Audio(Plugin):
 
     def __init__(self, dyphanbot):
         super().__init__(dyphanbot)
-        self.controller = AudioController(dyphanbot)
+
         self._persist_fn = "persistence.json"
+        self._config_fn = "config.json"
+
         self._persistence_data = self.load_json(self._persist_fn)
-    
+        self.config = self.load_json(self._config_fn, initial_data={
+            "enabled_experiments": [],
+            "use_webhooks": False
+        }, save_json=self._save_config)
+
+        self.ddb = None
+        if 'components' in self.config.get('enabled_experiments', []):
+            try:
+                from discord_components import DiscordComponents
+                self.ddb = DiscordComponents(self.dyphanbot, change_discord_methods=False)
+            except ImportError:
+                self.logger.warn("Experiment 'components' enabled, but 'discord_components' module not found.")
+
+        self.controller = AudioController(dyphanbot, config=self.config, ddb=self.ddb)
+
     def _save_persistence(self):
         return self.save_json(self._persist_fn, self._persistence_data)
+    
+    def _save_config(self, filename, data):
+        return self.dyphanbot.data.save_json(filename, data, indent=4)
     
     async def help(self, message, args):
         prefix = self.get_local_prefix(message)
@@ -188,7 +207,7 @@ class Audio(Plugin):
                         return
             except KeyError:
                 pass
-    
+
     async def join(self, message, args):
         if not message.author.voice or not message.author.voice.channel:
             return await message.channel.send(
@@ -341,6 +360,84 @@ class Audio(Plugin):
         await self.controller.reset(message.guild)
         return await message.channel.send("Reset player. Maybe it works now?")
     
+    async def experiments(self, message, args):
+        if str(message.author.id) not in self.dyphanbot.get_bot_masters():
+            print("no permission!")
+            return
+        
+        if len(args) <= 0:
+            return # no need to say anything about this command...
+        
+        subcmd = args[0]
+        experiments = args[1:]
+        if subcmd == "enable":
+            self.config["enabled_experiments"] = experiments
+            await message.reply("Set enabled experiments to: {}".format(
+                " ".join([f"`{x}`" for x in experiments])
+            ))
+        elif subcmd == "list":
+            await message.reply("Enabled audio plugin experiments: {}".format(
+                " ".join([f"`{x}`" for x in self.config.get("enabled_experiments", [])])
+            ))
+    
+    @Plugin.event
+    async def on_socket_response(self, res):
+        if 'components' in self.config.get('enabled_experiments', []) and self.ddb:
+            try:
+                from discord_components import InteractionEventType
+                if (res["t"] != "INTERACTION_CREATE") or (res["d"]["type"] != 3):
+                    return
+
+                ctx = self.ddb._get_context(res)
+                for key, value in InteractionEventType.items():
+                    if value == res["d"]["data"]["component_type"]:
+                        self.dyphanbot.dispatch(key, ctx)
+                        break
+            except ImportError:
+                pass
+
+    @Plugin.event
+    async def on_button_click(self, res):
+        print("button clicked...")
+        if 'components' in self.config.get('enabled_experiments', []):
+            try:
+                from discord_components import InteractionType
+                author = res.guild.get_member(res.user.id) # res.author doesn't actually get this
+                if res.component.id == "play-pause":
+                    play_or_pause = "paused"
+                    pausing = await self.controller.pause(res.guild, res.message)
+                    if not pausing:
+                        play_or_pause = "resumed"
+                        await self.controller.resume(res.guild, res.message)
+                    return await res.respond(
+                        content=f"*{author.display_name}* {play_or_pause} playback.",
+                        type=InteractionType.ChannelMessageWithSource,
+                        flags=None)
+                elif res.component.id == "stop":
+                    stopping = await self.controller.stop(res.guild, res.message)
+                    if stopping:
+                        return await res.respond(
+                            content=f"*{author.display_name}* stopped playback and cleared queue.",
+                            type=InteractionType.ChannelMessageWithSource,
+                            flags=None)
+                elif res.component.id == "skip":
+                    skipping = await self.controller.skip(res.guild, res.message)
+                    if skipping:
+                        return await res.respond(
+                            content=f"*{author.display_name}* skipped this playback.",
+                            type=InteractionType.ChannelMessageWithSource,
+                            flags=None)
+                elif res.component.id == "repeat":
+                    repeat_toggle = await self.controller.repeat(res.guild, res.message)
+                    if repeat_toggle is not None:
+                        await self.controller.status(res.guild, res.message, res.channel)
+                        return await res.respond(
+                            content=f"*{author.display_name}* put it on repeat." if repeat_toggle else f"*{author.display_name}* turned off repeat.",
+                            type=InteractionType.ChannelMessageWithSource,
+                            flags=None)
+            except ImportError:
+                pass
+
     @Plugin.command
     async def audio(self, client, message, args, _cmd='audio'):
         """ The Voice command.
@@ -357,6 +454,8 @@ class Audio(Plugin):
                 await getattr(self, scmd)(message, args[1:])
             elif scmd == 'playonjoin':
                 await self.playonjoin(message,args[1:])
+            elif scmd == 'experiments':
+                await self.experiments(message, args[1:])
             elif scmd == 'help':
                 await self.dyphanbot.bot_controller.help(message, [_cmd])
             else:

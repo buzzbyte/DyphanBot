@@ -11,9 +11,11 @@ class AudioController(object):
     Acts as an interface for youtube-dl, basically.
     """
 
-    def __init__(self, dyphanbot):
+    def __init__(self, dyphanbot, config={}, **kwargs):
         self.dyphanbot = dyphanbot
         self.players = {}
+        self.config = config
+        self.kwargs = kwargs
 
     def get_player(self, client, message, guild=None):
         """Retrieve the guild player, or generate one."""
@@ -25,7 +27,7 @@ class AudioController(object):
             player = self.players[guild_id]
             return player
         
-        player = AudioPlayer(client, guild, message)
+        player = AudioPlayer(client, guild, message, self.config, **self.kwargs)
         self.players[guild_id] = player
 
         return player

@@ -16,7 +16,8 @@ class AudioPlayer(object):
     """ Handles fetching and parsing media from URLs using youtube-dl, as well
     as the playlist queue.
     """
-    def __init__(self, client: discord.Client, guild: discord.Guild, message: discord.Message=None):
+    def __init__(self, client: discord.Client, guild: discord.Guild,
+            message: discord.Message=None, config: dict={}, **kwargs):
         self._logger = logging.getLogger(__name__)
         self._dead = False
         self._tasks = []
@@ -24,6 +25,8 @@ class AudioPlayer(object):
         self.message = message
         self.guild = message.guild if message else guild
         self.vclient = self.guild.voice_client
+        self.config = config
+        self.kwargs = kwargs
 
         self.queue = asyncio.Queue()
         self.next = asyncio.Event()
@@ -35,8 +38,8 @@ class AudioPlayer(object):
         self.last_source = None
         self._repeat = False
 
-        # TODO: Make webhook embeds actually optional...
-        self.can_use_webhooks = False
+        # TODO: Make webhook embeds actually optional per-server...
+        self.can_use_webhooks = self.config.get('use_webhooks', False)
 
         self.loop = self.vclient.loop
         self.ytdl_extractor = YTDLExtractor(self.loop)
@@ -290,13 +293,42 @@ class AudioPlayer(object):
             )
         else:
             await self.update_last_playing()
+            if 'components' in self.config.get('enabled_experiments', []):
+                from discord_components import (
+                    DiscordComponents, Button, ButtonStyle)
+                ddb: DiscordComponents = self.kwargs.get("ddb")
+                if ddb:
+                    self.now_playing = await ddb.send_component_msg(
+                        channel,
+                        content="Buttons experiment enabled",
+                        embed=self.np_embed(self.current),
+                        components=[
+                            [
+                                Button(label="\u275A\u275A" if self.vclient.is_playing() else "\u25B6\uFE0E", id="play-pause"),
+                                Button(label="\u2B1B\uFE0E", id="stop"),
+                                Button(label="\u25BA\u2759", id="skip"),
+                                Button(label="\U0001f501\uFE0E", id="repeat", 
+                                       style=ButtonStyle.blue if self.repeat else ButtonStyle.gray)
+                            ]
+                        ])
+                    self.now_playing.__dict__["has_component"] = True
+                    return
             self.now_playing = await channel.send(embed=self.np_embed(self.current))
 
     async def update_last_playing(self, last_source=None):
         """ Replaces last "Now Playing" status with a "Played" embed """
         if self.now_playing:
             if last_source and not self.repeat:
-                await self.now_playing.edit(embed=self.played_embed(last_source))
+                if self.now_playing.__dict__.get("has_component"):
+                    print("sending played component msg")
+                    ddb = self.kwargs.get("ddb")
+                    await ddb.edit_component_msg(
+                        self.now_playing,
+                        embed=self.played_embed(last_source),
+                        components=[]
+                    )
+                else:
+                    await self.now_playing.edit(embed=self.played_embed(last_source))
             else:
                 try:
                     await self.now_playing.delete()
