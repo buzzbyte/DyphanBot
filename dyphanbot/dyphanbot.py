@@ -9,6 +9,7 @@ from dyphanbot.constants import CB_NAME
 from dyphanbot.datamanager import DataManager
 from dyphanbot.botcontroller import BotController
 from dyphanbot.pluginloader import PluginLoader
+from dyphanbot import __version__
 
 # Configure the logging module
 logging.basicConfig(
@@ -90,6 +91,13 @@ class DyphanBot(discord.Client):
     def get_bot_masters(self):
         """ Returns a list of configured Bot Masters' user IDs """
         return self.data._get_key('bot_masters', [])
+    
+    def release_info(self):
+        """ Returns a dict containing release name and version information """
+        return {
+            "version": __version__,
+            "name": CB_NAME
+        }
 
     async def process_command(self, message, cmd, args, prefix=False):
         self.logger.info("Got command `%s` with args `%s`", cmd, ' '.join(args))
@@ -125,7 +133,10 @@ class DyphanBot(discord.Client):
         self.logger.info("Enabled intents: %s", ' '.join([x for x in intents if intents[x]]))
         self.logger.info("Disabled intents: %s", ' '.join([x for x in intents if not intents[x]]))
 
-        self.logger.info("Initialized %s (%s) running %s", self.user.name, self.user.id, CB_NAME)
+        release_name = CB_NAME
+        if __version__:
+            release_name += f"@{__version__}"
+        self.logger.info("Initialized %s (%s) running %s", self.user.name, self.user.id, release_name)
     
     async def on_member_join(self, member):
         for handler in self.mjoin_handlers:

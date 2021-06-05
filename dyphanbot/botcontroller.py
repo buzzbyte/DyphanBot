@@ -85,6 +85,8 @@ class BotController:
     async def help(self, message, args):
         """ Sends an embed providing general or plugin help """
         plugins = self.dyphanbot.pluginloader.get_plugins()
+        release_info = self.dyphanbot.release_info()
+        version = release_info["version"]
         
         if len(args) < 1:
             prefix = self._get_prefix(message.guild) or "@{0} ".format(self.dyphanbot.user.name)
@@ -108,6 +110,12 @@ class BotController:
                 name="`{0}help [plugin/command]`".format(prefix),
                 value="Displays more info about the plugin. If a command is specified, displays info about the command's plugin.",
                 inline=False
+            )
+            embed.set_footer(
+                text="Running {0}{1}".format(
+                    release_info["name"],
+                    f" v{version}" if version else ""
+                )
             )
             await message.channel.send(embed=embed)
         else:
