@@ -9,6 +9,7 @@ from dyphanbot.constants import CB_NAME
 from dyphanbot.datamanager import DataManager
 from dyphanbot.botcontroller import BotController
 from dyphanbot.pluginloader import PluginLoader
+from dyphanbot.api import WebAPI
 from dyphanbot import __version__
 
 # Configure the logging module
@@ -33,6 +34,8 @@ class DyphanBot(discord.Client):
     def setup(self, config_path):
         """ Initializes core DyphanBot components and loads plugins """
         self.data = DataManager(self, config_path)
+        self.api_config = self.data._get_key('web_api', {})
+        self.web_api = WebAPI(self, self.api_config)
         self.bot_controller = BotController(self)
         self.pluginloader = PluginLoader(self,
             disabled_plugins=self.data._get_key('disabled_plugins', []),
@@ -81,7 +84,7 @@ class DyphanBot(discord.Client):
 
     def bot_mention(self, msg):
         """Returns a mention string for the bot"""
-        server = msg.guild
+        server = msg.guild if msg else None
         return '{0.mention}'.format(server.me if server else self.user)
 
     def get_avatar_url(self):
@@ -91,6 +94,10 @@ class DyphanBot(discord.Client):
     def get_bot_masters(self):
         """ Returns a list of configured Bot Masters' user IDs """
         return self.data._get_key('bot_masters', [])
+    
+    def is_botmaster(self, user):
+        """ Returns True if the user is a botmaster, False otherwise """
+        return str(user.id) in self.get_bot_masters()
     
     def release_info(self):
         """ Returns a dict containing release name and version information """
@@ -114,7 +121,7 @@ class DyphanBot(discord.Client):
                 cmd_perms = self.commands[cmd].permissions
                 self.logger.info("Command `%s` has permissions `%s`", cmd, cmd_perms)
                 if "botmaster" in cmd_perms and cmd_perms["botmaster"]:
-                    return (await self.commands[cmd](self, message, args) if str(message.author.id) in self.get_bot_masters() else None)
+                    return (await self.commands[cmd](self, message, args) if self.is_botmaster(message.author) else None)
                 if "guild_perms" in cmd_perms:
                     member_perms = message.author.permissions_in(message.channel)
                     for perms in cmd_perms["guild_perms"]:
@@ -132,6 +139,8 @@ class DyphanBot(discord.Client):
         intents = dict(iter(self.intents))
         self.logger.info("Enabled intents: %s", ' '.join([x for x in intents if intents[x]]))
         self.logger.info("Disabled intents: %s", ' '.join([x for x in intents if not intents[x]]))
+
+        self.web_api.start_server()
 
         release_name = CB_NAME
         if __version__:

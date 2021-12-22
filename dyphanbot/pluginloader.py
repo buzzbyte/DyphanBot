@@ -9,6 +9,8 @@ import importlib.util
 
 from importlib.machinery import PathFinder
 
+from aiohttp import web
+
 from dyphanbot.constants import PLUGIN_DIRS
 
 class Plugin(object):
@@ -87,7 +89,10 @@ class Plugin(object):
         """ Returns the prefix for the guild if assigned, otherwise, returns
             the bot mention
         """
-        return self.dyphanbot.bot_controller._get_prefix(message.guild) or "{} ".format(self.dyphanbot.bot_mention(message))
+        default = "{} ".format(self.dyphanbot.bot_mention(message))
+        if not message:
+            return default
+        return self.dyphanbot.bot_controller._get_prefix(message.guild) or default
     
     async def help(self, message, args):
         """ Overridable help method for plugins.
@@ -116,6 +121,25 @@ class Plugin(object):
             "helptext": "No help provided... :c",
             "unlisted": True
         }
+
+    @staticmethod
+    def endpoint(handler=None, *, endpoint, method='GET'):
+        """ Handles API requests to a certain endpoint of a plugin """
+        if not handler:
+            return functools.partial(Plugin.endpoint, endpoint=endpoint, method=method)
+
+        assert not handler.__name__.startswith('_'), "Handlers must be public"
+        handler.__dict__['endpoint_handler'] = True
+        handler.__dict__['endpoint'] = endpoint
+        handler.__dict__['method'] = method
+        return handler
+    
+    @staticmethod
+    def websocket(handler):
+        """ Handles websocket connections for a plugin """
+        assert not handler.__name__.startswith('_'), "Handlers must be public"
+        handler.__dict__['websocket_handler'] = True
+        return handler
 
     @staticmethod
     def event(handler):
@@ -199,6 +223,8 @@ class PluginLoader(object):
                           ", ".join([x.__name__ for x in plugins]))
         for plugin in plugins:
             try:
+                plogger = logging.getLogger(plugin.__name__)
+                plugin_app = web.Application(logger=plogger)
                 plugin_obj = plugin(self.dyphanbot)
                 for name, method in plugin_obj.__class__.__dict__.items():
                     real_method = getattr(plugin_obj, name, None)
@@ -221,6 +247,10 @@ class PluginLoader(object):
                         self.dyphanbot.add_message_handler(real_method, real_method.raw)
                     elif hasattr(method, "event_handler"):
                         real_method = self.dyphanbot.event(real_method)
+                    elif hasattr(method, "endpoint_handler"):
+                        plugin_app.router.add_route(
+                            real_method.method, real_method.endpoint, real_method)
+                self.dyphanbot.web_api.register_plugin(plugin.__name__, plugin_app)
                 self.plugins[plugin.__name__] = plugin_obj
             except Exception as err:
                 self.logger.warning("Unable to load plugin '%s': %s", plugin.__name__, err)
