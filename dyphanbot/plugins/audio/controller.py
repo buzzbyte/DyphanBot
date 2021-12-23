@@ -1,10 +1,81 @@
 from itertools import islice
-from re import S
 import typing
 
 import discord
 
 from .player import AudioPlayer
+
+class PlayerButton(discord.ui.Button):
+    def __init__(self, controller, cb_func, label, emoji_id=None, **kwargs):
+        self.cb_func = cb_func
+        self.controller = controller
+        self.client = controller.dyphanbot
+
+        self.active = False
+
+        emoji = self.client.get_emoji(emoji_id) if emoji_id else None
+        if emoji:
+            label = None
+        
+        super().__init__(label=label, emoji=emoji, **kwargs)
+    
+    async def callback(self, interaction: discord.Interaction):
+        if not interaction.user and not interaction.guild:
+            return
+        
+        return await self.cb_func(self, interaction)
+
+class PlayerView(discord.ui.View):
+    def __init__(self, controller, guild, emojis={}):
+        super().__init__(timeout=None)
+        self.controller = controller
+        self.guild = guild
+        self.emojis = emojis
+    
+    async def load_view(self):
+        self.clear_items()
+
+        self.status = await self.controller.status(self.guild)
+
+        if self.status.is_paused:
+            self.add_item(PlayerButton(self.controller, self.play,  "Play",  self.emojis.get("play"),  custom_id="audio:play"))
+        else:
+            self.add_item(PlayerButton(self.controller, self.pause, "Pause", self.emojis.get("pause"), custom_id="audio:pause"))
+        
+        self.add_item(PlayerButton(self.controller, self.stop, "Stop", self.emojis.get("stop"), custom_id="audio:stop"))
+        self.add_item(PlayerButton(self.controller, self.skip, "Skip", self.emojis.get("skip"), custom_id="audio:skip"))
+
+        self.add_item(PlayerButton(self.controller, self.repeat, "Repeat", self.emojis.get("repeat"), custom_id="audio:repeat",
+                        style=discord.ButtonStyle.primary if self.status.is_repeating else discord.ButtonStyle.secondary))
+    
+    async def play(self, button: PlayerButton, interaction):
+        author = interaction.guild.get_member(interaction.user.id)
+        await self.controller.resume(interaction.guild, interaction.message)
+        await interaction.response.send_message(f"*{author.display_name}* resumed playback.")
+    
+    async def pause(self, button: PlayerButton, interaction):
+        author = interaction.guild.get_member(interaction.user.id)
+        await self.controller.pause(interaction.guild, interaction.message)
+        await interaction.response.send_message(f"*{author.display_name}* paused playback.")
+    
+    async def stop(self, button: PlayerButton, interaction):
+        author = interaction.guild.get_member(interaction.user.id)
+        stopping = await self.controller.stop(interaction.guild, interaction.message)
+        if stopping:
+            await interaction.response.send_message(f"*{author.display_name}* stopped playback and cleared queue.")
+    
+    async def skip(self, button: PlayerButton, interaction):
+        author = interaction.guild.get_member(interaction.user.id)
+        skipping = await self.controller.skip(interaction.guild, interaction.message)
+        if skipping:
+            await interaction.response.send_message(f"*{author.display_name}* skipped this playback.")
+    
+    async def repeat(self, button: PlayerButton, interaction):
+        author = interaction.guild.get_member(interaction.user.id)
+        repeat_toggle = await self.controller.repeat(interaction.guild, interaction.message)
+        if repeat_toggle is not None:
+            await self.controller.status(interaction.guild, interaction.message, interaction.channel)
+            await interaction.response.send_message(f"*{author.display_name}* put it on repeat." if repeat_toggle else f"*{author.display_name}* turned off repeat.")
 
 class AudioController(object):
     """ Commands for playing and controlling music playback.
@@ -27,7 +98,9 @@ class AudioController(object):
             player = self.players[guild_id]
             return player
         
-        player = AudioPlayer(client, guild, message, self.config, **self.kwargs)
+        player_view = PlayerView(self, guild, self.config.get('emoji', {}))
+        
+        player = AudioPlayer(client, guild, message, self.config, view=player_view, **self.kwargs)
         self.players[guild_id] = player
 
         return player
@@ -48,12 +121,13 @@ class AudioController(object):
         """ Connects to the user's voice channel. """
 
         vclient: discord.VoiceClient = guild.voice_client
-        if vclient:
-            await vclient.move_to(vchannel)
-        else:
-            await vchannel.connect(timeout=timeout, reconnect=reconnect)
         
-        return guild.voice_client
+        try:
+            vclient = await vchannel.connect(timeout=timeout, reconnect=reconnect)
+        except discord.ClientException:
+            await vclient.move_to(vchannel)
+        
+        return vclient
 
     async def play(self,
                    guild: discord.Guild,
@@ -67,11 +141,9 @@ class AudioController(object):
         voice channel.
         """
 
-        vclient = guild.voice_client
+        vclient = await self.join(guild, vchannel, timeout, reconnect)
         if not vclient:
-            vclient = await self.join(guild, vchannel, timeout, reconnect)
-            if not vclient:
-                return
+            return
         
         player = self.get_player(self.dyphanbot, message, guild)
         return await player.prepare_entries(query, message, **kwargs)
@@ -198,8 +270,9 @@ class AudioController(object):
         
         if not message and not channel:
             source = player.current
-            source.is_playing = vclient.is_playing()
-            source.is_paused  = vclient.is_paused()
+            source.is_repeating = player.repeat
+            source.is_playing   = vclient.is_playing()
+            source.is_paused    = vclient.is_paused()
             source.np_str = player.np_status_str(source)
             return source
         

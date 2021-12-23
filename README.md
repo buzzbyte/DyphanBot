@@ -2,7 +2,7 @@
 ~~<sup>~~Dyphan's guts~~</sup>~~
 
 An expandable Discord bot! Written in Python using
-[discord.py](https://github.com/Rapptz/discord.py).
+[Pycord](https://github.com/Pycord-Development/pycord).
 Still in early stages.
 
 Supports plugin-loading from `~/.dyphan/plugins` and `~/.config/dyphan/plugins`
@@ -14,14 +14,16 @@ Each DyphanBot plugin can have its own dependency. The dependencies for
 DyphanBot's core, as well as the built-in plugins that require other
 dependencies, are listed here:
 * **Core**
-  * Python >= 3.6
-  * [discord.py](https://github.com/Rapptz/discord.py) >= 1.6
+  * Python >= 3.8
+  * [py-cord](https://github.com/Pycord-Development/pycord) >= 2.0
 * **Audio**
-  * discord.py[voice]
+  * py-cord[voice]
   * [youtube-dl](https://github.com/ytdl-org/youtube-dl)
 * **WebAPI (WIP)**
-  * [websockets](https://github.com/aaugustin/websockets)
-  * [requests-oauthlib](https://github.com/requests/requests-oauthlib)
+  * ~~[websockets](https://github.com/aaugustin/websockets)~~
+  * ~~[requests-oauthlib](https://github.com/requests/requests-oauthlib)~~
+  * [aiohttp_session[secure]](https://github.com/aio-libs/aiohttp-session)
+  * [aioauth-client](https://github.com/klen/aioauth-client)
 
 ## Configuration
 DyphanBot looks for a `config.json` file in `~/.dyphan` and `~/.config/dyphan`
@@ -35,7 +37,7 @@ Available configuration settings:
 - `disabled_plugins`: The list of plugins that should be disabled.
 - `plugin_dirs`: Additional plugin directories DyphanBot can look in.
 - `intents`: A key-value pair of Discord intents the bot should run with  
-  (see [Discord docs][intent docs] and [discord.py reference][intent refs] for
+  (see [Discord docs][intent docs] and [Pycord reference][intent refs] for
    more info).
 
 <details>
@@ -62,14 +64,14 @@ Available configuration settings:
 </details>
 
 [intent docs]: https://discord.com/developers/docs/topics/gateway#gateway-intents
-[intent refs]: https://discordpy.readthedocs.io/en/latest/api.html#discord.Intents
+[intent refs]: https://docs.pycord.dev/en/master/api.html#discord.Intents
 
 ## Installation
 
 ```bash
 git clone https://github.com/buzzbyte/DyphanBot.git
 cd DyphanBot
-python3 -m pip install .
+python3 -m pip install -U .
 
 # to run:
 python3 -m dyphanbot

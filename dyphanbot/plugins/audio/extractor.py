@@ -1,6 +1,7 @@
 import re
 import asyncio
 import datetime
+import subprocess
 from functools import partial
 
 import discord
@@ -18,7 +19,8 @@ YTDL_OPTS = {
 
 FFMPEG_OPTS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn'
+    'options': '-vn',
+    'stderr': subprocess.PIPE
 }
 
 class AudioExtractionError(PluginError):

@@ -31,7 +31,7 @@ class WebAPI(object):
 
     def _can_access_channel(self, channel_id):
         channel = self._get_channel(channel_id)
-        return self.dyphanbot.user.permissions_in(channel).send_messages
+        return channel.permissions_for(self.dyphanbot.user).send_messages
 
     async def _is_user_bot_master(self, ws, session):
         bot_masters = self.dyphanbot.get_bot_masters()
@@ -66,7 +66,7 @@ class WebAPI(object):
             "discriminator": botuser.discriminator,
             "display_name": botuser.display_name,
             "avatar": botuser.avatar,
-            "avatar_url": str(botuser.avatar_url),
+            "avatar_url": str(botuser.avatar.url),
             "color": str(botuser.color),
             "bot": botuser.bot
         }}

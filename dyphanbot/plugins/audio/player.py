@@ -1,7 +1,8 @@
-import copy
+from asyncio.queues import QueueEmpty
 import asyncio
 import logging
 import textwrap
+import traceback
 
 from async_timeout import timeout
 
@@ -17,7 +18,8 @@ class AudioPlayer(object):
     as the playlist queue.
     """
     def __init__(self, client: discord.Client, guild: discord.Guild,
-            message: discord.Message=None, config: dict={}, **kwargs):
+            message: discord.Message=None, config: dict={},
+            view: discord.ui.View=None, **kwargs):
         self._logger = logging.getLogger(__name__)
         self._dead = False
         self._tasks = []
@@ -26,6 +28,7 @@ class AudioPlayer(object):
         self.guild = message.guild if message else guild
         self.vclient = self.guild.voice_client
         self.config = config
+        self.view = view
         self.kwargs = kwargs
 
         self.queue = asyncio.Queue()
@@ -190,6 +193,7 @@ class AudioPlayer(object):
     
     def play_finalize(self, error):
         """ Called after VoiceClient finishes playing source or error occured """
+        print("play_finalize()")
         if error:
             if getattr(self.client, 'dev_mode', False):
                 raise error
@@ -199,6 +203,7 @@ class AudioPlayer(object):
 
     async def get_queued_source(self, wait_for_queue=True):
         """ Gets next queued entry, processes it, and returns its source """
+        print("get_queued_source()")
         source = None
 
         if wait_for_queue:
@@ -220,7 +225,10 @@ class AudioPlayer(object):
         await self.client.wait_until_ready()
 
         while not self.client.is_closed():
+            print("new loop")
             self.next.clear()
+
+            print("next cleared")
 
             if self.repeat and self.last_source:
                 new_source = await self.last_source.entry.regather_source()
@@ -232,27 +240,47 @@ class AudioPlayer(object):
             if not source:
                 try:
                     entry, source = await self.get_queued_source()
+                    print("grabbed queued source")
                 except asyncio.TimeoutError:
                     return await self.destroy()
                 except asyncio.CancelledError:
+                    print("got cancelled")
                     pass # assume cancellation was intentional
                 except Exception:
+                    traceback.print_exc()
                     continue
+
+            # reassign voice client in case the reference is outdated
+            # (happens when the bot gets disconnected while the player loop is still running)
+            self.vclient = self.guild.voice_client
+
+            if not self.vclient:
+                # kill the loop if there's no voice client (saves resources)
+                print("no voice client; killing player")
+                return await self.destroy()
             
             if source and self.vclient:
+                print("preparing source to play")
+
                 source.volume = self.volume
                 self.current = source
 
                 if source.entry._data.get('before_playback'):
                     await source.entry._data['before_playback']()
                 
+                print("before play call")
+                
                 self.vclient.play(source, after=self.play_finalize)
                 await self.update_now_playing(source.entry.channel)
+
+                print("after play call")
 
                 if self.last_source:
                     self.last_source.cleanup()
                 
                 self.last_source = source
+
+                print("update last source")
                 
                 if not self.next_source and not self.repeat:
                     try:
@@ -262,9 +290,12 @@ class AudioPlayer(object):
                         # we'll get 'em next time...
                         self.next_source = None
                 
+                print("pending next...")
                 await self.next.wait()
                 if source.entry._data.get('after_playback'):
                     await source.entry._data['after_playback']()
+
+                print("finishing loop...")
 
                 await self.update_last_playing(source)
                 source.cleanup()
@@ -272,7 +303,7 @@ class AudioPlayer(object):
             self.current = None
 
     async def find_or_create_webhook(self, channel):
-        if self.guild.me.permissions_in(channel).manage_webhooks and self.can_use_webhooks:
+        if channel.permissions_for(self.guild.me).manage_webhooks and self.can_use_webhooks:
             for webhook in await channel.webhooks():
                 if "DyphanBot" in webhook.name:
                     return webhook
@@ -293,42 +324,22 @@ class AudioPlayer(object):
             )
         else:
             await self.update_last_playing()
-            if 'components' in self.config.get('enabled_experiments', []):
-                from discord_components import (
-                    DiscordComponents, Button, ButtonStyle)
-                ddb: DiscordComponents = self.kwargs.get("ddb")
-                if ddb:
-                    self.now_playing = await ddb.send_component_msg(
-                        channel,
-                        content="Buttons experiment enabled",
-                        embed=self.np_embed(self.current),
-                        components=[
-                            [
-                                Button(label="\u275A\u275A" if self.vclient.is_playing() else "\u25B6\uFE0E", id="play-pause"),
-                                Button(label="\u2B1B\uFE0E", id="stop"),
-                                Button(label="\u25BA\u2759", id="skip"),
-                                Button(label="\U0001f501\uFE0E", id="repeat", 
-                                       style=ButtonStyle.blue if self.repeat else ButtonStyle.gray)
-                            ]
-                        ])
-                    self.now_playing.__dict__["has_component"] = True
-                    return
-            self.now_playing = await channel.send(embed=self.np_embed(self.current))
+            if self.view:
+                await self.view.load_view()
+            
+            self.now_playing = await channel.send(
+                embed=self.np_embed(self.current),
+                view=self.view
+            )
 
     async def update_last_playing(self, last_source=None):
         """ Replaces last "Now Playing" status with a "Played" embed """
         if self.now_playing:
             if last_source and not self.repeat:
-                if self.now_playing.__dict__.get("has_component"):
-                    print("sending played component msg")
-                    ddb = self.kwargs.get("ddb")
-                    await ddb.edit_component_msg(
-                        self.now_playing,
-                        embed=self.played_embed(last_source),
-                        components=[]
-                    )
-                else:
-                    await self.now_playing.edit(embed=self.played_embed(last_source))
+                await self.now_playing.edit(
+                    embed=self.played_embed(last_source),
+                    view=None
+                )
             else:
                 try:
                     await self.now_playing.delete()
@@ -339,7 +350,12 @@ class AudioPlayer(object):
 
     def clear_queue(self):
         """ Clears the playlist queue. """
-        self.queue._queue.clear()
+        #self.queue._queue.clear()
+        try:
+            for _ in range(self.queue.qsize()):
+                self.queue.get_nowait()
+        except QueueEmpty:
+            pass
 
     def skip(self):
         """ Skip currently playing audio source """
@@ -350,6 +366,7 @@ class AudioPlayer(object):
     def stop(self):
         """ Stops playing and clears queue """
         self.repeat = False
+        self.clear_queue()
         if self.next_source:
             self.next_source.cleanup()
         self.next_source = None
@@ -358,7 +375,6 @@ class AudioPlayer(object):
         self.vclient.stop()
         if self.vclient.source:
             self.vclient.source.cleanup()
-        self.clear_queue()
 
     async def cleanup(self):
         """ Disconnects from the voice client and clears the playlist queue. """

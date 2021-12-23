@@ -64,7 +64,7 @@ class DyphanBot(discord.Client):
                     .format(intent, val))
 
     def run(self):
-        super().run(self.data._get_key('token'), bot=self.data._get_key('bot', True))
+        super().run(self.data._get_key('token'))
 
     def add_command_handler(self, command, handler, permissions=None, plugin=None):
         handler.__dict__['plugin'] = plugin
@@ -123,7 +123,7 @@ class DyphanBot(discord.Client):
                 if "botmaster" in cmd_perms and cmd_perms["botmaster"]:
                     return (await self.commands[cmd](self, message, args) if self.is_botmaster(message.author) else None)
                 if "guild_perms" in cmd_perms:
-                    member_perms = message.author.permissions_in(message.channel)
+                    member_perms = message.channel.permissions_for(message.author)
                     for perms in cmd_perms["guild_perms"]:
                         if not getattr(member_perms, perms):
                             return None

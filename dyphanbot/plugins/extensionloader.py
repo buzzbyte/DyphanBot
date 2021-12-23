@@ -214,6 +214,7 @@ class ELCore(object):
         time_fmt = "%Y-%m-%dT%H:%M:%S"
 
         # HUGE PAYLOAD!! #
+        author_avatar = message.author.avatar or message.author.default_avatar
         req_payload = {
             "query": args,
             "message": {
@@ -223,11 +224,11 @@ class ELCore(object):
                     "name": message.author.name,
                     "discriminator": message.author.discriminator,
                     "display_name": message.author.display_name,
-                    "avatar_url": str(message.author.avatar_url),
+                    "avatar_url": str(author_avatar.url),
                     "color": message.author.color.value,
                     "activity": str(message.author.activity) or None,
                     "mention": message.author.mention,
-                    "channel_permissions": message.author.permissions_in(message.channel).value,
+                    "channel_permissions": message.channel.permissions_for(message.author).value,
                     "guild_permissions": message.author.guild_permissions.value,
                     "bot": message.author.bot,
                     "joined_at": message.author.joined_at.strftime(time_fmt),
