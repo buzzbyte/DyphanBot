@@ -251,8 +251,8 @@ class ELCore(object):
                 "guild": {
                     "id": message.guild.id,
                     "name": message.guild.name,
-                    "icon_url": str(message.guild.icon_url),
-                    "owner_id": message.guild.owner_id,
+                    "icon_url": str(message.guild.icon.url),
+                    "owner_id": message.guild.owner.id,
                     "max_presences": message.guild.max_presences,
                     "max_members": message.guild.max_members,
                     "description": message.guild.description,
