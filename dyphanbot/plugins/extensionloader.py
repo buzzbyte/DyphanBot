@@ -52,12 +52,13 @@ class ELCore(object):
                 data_uri = jfo.get('datauri', "")
                 filename = jfo.get('filename')
                 spoiler = jfo.get('spoiler', False)
-                _, encoded = data_uri.split(",", 1)
+                #_, encoded = data_uri.split(",", 1)
                 if not data_uri:
                     continue
 
                 # Get binary from base64 and make it a discord File object
-                fio = io.BytesIO(b64decode(encoded))
+                #fio = io.BytesIO(b64decode(encoded))
+                fio = io.BytesIO(b64decode(data_uri))
                 out_files.append(discord.File(fio, filename=filename, spoiler=spoiler))
         else:
             out_files = None
