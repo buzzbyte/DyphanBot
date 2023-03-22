@@ -7,7 +7,7 @@ from functools import partial
 import discord
 from dyphanbot import PluginError
 
-import youtube_dl
+import yt_dlp as youtube_dl
 
 YTDL_OPTS = {
     'format': 'webm[abr>0]/bestaudio/best',

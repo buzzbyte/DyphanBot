@@ -18,7 +18,7 @@ dependencies, are listed here:
   * [py-cord](https://github.com/Pycord-Development/pycord) >= 2.0
 * **Audio**
   * py-cord[voice]
-  * [youtube-dl](https://github.com/ytdl-org/youtube-dl)
+  * [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 * **WebAPI (WIP)**
   * ~~[websockets](https://github.com/aaugustin/websockets)~~
   * ~~[requests-oauthlib](https://github.com/requests/requests-oauthlib)~~

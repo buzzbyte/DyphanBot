@@ -11,7 +11,7 @@ from .extractor import AudioExtractionError, YTDLExtractor
 HELP_TEXT = """*aliases: `audio`, `voice`, `music`, `m`*
 Connects to a voice channel and plays audio.
 Supports playing from YouTube and various other sites, as well as any file format FFMPEG supports.
-See the [list of supported sites](https://ytdl-org.github.io/youtube-dl/supportedsites.html) for all the sites this plugin can play from."""
+See the [list of supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) for all the sites this plugin can play from."""
 
 class Audio(Plugin):
     """ Handles the 'audio' commands for DyphanBot """
