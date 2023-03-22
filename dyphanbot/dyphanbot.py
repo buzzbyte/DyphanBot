@@ -42,7 +42,7 @@ class DyphanBot(discord.Client):
             user_plugin_dirs=self.data._get_key('plugin_dirs', []),
             dev_mode=self.dev_mode)
         
-        self._intents = discord.Intents.default()
+        self._intents = discord.Intents.all() # fuck intents
         
         self.commands = {}
 
