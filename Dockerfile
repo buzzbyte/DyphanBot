@@ -17,7 +17,7 @@ LABEL org.label-schema.docker.cmd="docker run -v ~/dyphan:/dyphan/.dyphan -d dyp
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt update && apt install -yqq --no-install-recommends \
-    git \
+    git ffmpeg\
  && rm -rf /var/lib/apt/lists/*
 
 ENV HOME /dyphan
