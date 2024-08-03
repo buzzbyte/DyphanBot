@@ -211,8 +211,10 @@ class PluginLoader(object):
         self.logger = logging.getLogger(__name__)
         self.dyphanbot = dyphanbot
         self.disabled_plugins = disabled_plugins
-        self.plugin_dirs = PLUGIN_DIRS + [os.path.expanduser(pdirs) for pdirs in user_plugin_dirs]
         self.dev_mode = dev_mode
+
+        self.plugin_dirs = PLUGIN_DIRS + [os.path.expanduser(pdirs) for pdirs in user_plugin_dirs]
+        self.plugin_dirs.append(os.path.join(self.dyphanbot.data.data_dir, "plugins"))
 
         self.plugins = {}
 

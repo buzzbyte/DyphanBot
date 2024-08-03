@@ -82,8 +82,8 @@ class ConfigManager(object):
             else:
                 try:
                     config = json.loads(raw_data)
-                    if "token" not in config:
-                        raise InvalidConfigurationError('token', "Required Discord API token is not defined")
+                    if not os.getenv("DISCORD_BOT_TOKEN") and "token" not in config:
+                        raise InvalidConfigurationError('DISCORD_BOT_TOKEN', "Required Discord API token is not defined")
                 except (json.JSONDecodeError, InvalidConfigurationError) as e:
                     self._err("{}: {}".format(type(e).__name__, e))
 

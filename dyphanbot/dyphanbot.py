@@ -4,6 +4,9 @@ import random
 import logging
 import discord
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import dyphanbot.utils as utils
 from dyphanbot.constants import CB_NAME
 from dyphanbot.datamanager import DataManager
@@ -27,6 +30,9 @@ class DyphanBot(discord.Client):
         self.dev_mode = kwargs.get('dev_mode')
         if self.debug:
             logging.getLogger("dyphanbot").setLevel(logging.DEBUG)
+        
+        if not config_path:
+            config_path = os.getenv("DYPHANBOT_CONFIG_PATH")
         
         self.setup(config_path)
         super().__init__(intents=self._intents)
@@ -64,7 +70,7 @@ class DyphanBot(discord.Client):
                     .format(intent, val))
 
     def run(self):
-        super().run(self.data._get_key('token'))
+        super().run(os.getenv("DISCORD_BOT_TOKEN", self.data._get_key('token')))
 
     def add_command_handler(self, command, handler, permissions=None, plugin=None):
         handler.__dict__['plugin'] = plugin

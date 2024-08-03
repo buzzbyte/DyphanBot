@@ -25,13 +25,38 @@ dependencies, are listed here:
   * [aiohttp_session[secure]](https://github.com/aio-libs/aiohttp-session)
   * [aioauth-client](https://github.com/klen/aioauth-client)
 
-## Configuration
-DyphanBot looks for a `config.json` file in `~/.dyphan` and `~/.config/dyphan`
-directories. Once it finds the file, it will assign the location it first found
-it in as the default data directory.
+## Set up
+
+### Installation and Configuration
+
+1. Clone repo
+    ```bash
+    git clone https://github.com/buzzbyte/DyphanBot.git
+    cd DyphanBot
+    ```
+
+2. Copy `example.env` to `.env`
+    ```bash
+    cp ./example.env ./.env
+    ```
+
+3. Edit `.env` file and configure required tokens and settings. This overrides `config.json`.
+
+4. Install and run DyphanBot
+    ```bash
+    python3 -m pip install -U .
+    python3 -m dyphanbot
+    ```
+    This will also generate a `config.json` in the default location if it doesn't exist.
+
+### Further configuration
+If `DYPHANBOT_CONFIG_PATH` is not defined in the `.env` file, DyphanBot will
+look for a `config.json` file in `~/.dyphan` and `~/.config/dyphan`
+directories; and, once it finds the file, it will assign the first location
+it found as the default data directory.
 
 Available configuration settings:
-- `token`: The Discord API token required for DyphanBot to run.
+- `token`: The Discord API token required for DyphanBot to run (deprecated; use `.env` file to configure).
 - `bot_masters`: A list of Discord user IDs that have access to DyphanBot's
     software (basically sysadmins).
 - `disabled_plugins`: The list of plugins that should be disabled.
@@ -41,12 +66,11 @@ Available configuration settings:
    more info).
 
 <details>
-<summary><b>Config Sample</b></summary>
+<summary><b>Sample: config.json</b></summary>
 
 ```json
 {
-    "token": "__YOUR_DISCORD_BOT_API_TOKEN__",
-    "bot_masters": [ 123456789876543210, 098765432123456789 ],
+    "bot_masters": [ "123456789876543210", "098765432123456789" ],
     "disabled_plugins": [
         "testplugin",
         "example_plugin"
@@ -65,17 +89,6 @@ Available configuration settings:
 
 [intent docs]: https://discord.com/developers/docs/topics/gateway#gateway-intents
 [intent refs]: https://docs.pycord.dev/en/master/api.html#discord.Intents
-
-## Installation
-
-```bash
-git clone https://github.com/buzzbyte/DyphanBot.git
-cd DyphanBot
-python3 -m pip install -U .
-
-# to run:
-python3 -m dyphanbot
-```
 
 ## Usage
 
