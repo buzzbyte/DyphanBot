@@ -38,6 +38,8 @@ class Echo(Plugin):
 
     @Plugin.command
     async def bigmoji(self, client, message, args):
+        if message.author.bot:
+            return
         inputtext = " ".join(args)
         emoji = self.find_emoji(client, message, inputtext)
         if emoji:
@@ -48,11 +50,15 @@ class Echo(Plugin):
     
     @Plugin.command
     async def emoji(self, client, message, args):
+        if message.author.bot:
+            return
         inputtext = " ".join(args)
         await self.send_emoji(client, message, inputtext)
     
     @Plugin.on_message(raw=True)
     async def emojify(self, client, message):
+        if message.author.bot:
+            return
         if message.author is not (message.guild.me or client.user):
             inputtext = message.content
             output = ""
