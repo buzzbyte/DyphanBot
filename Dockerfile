@@ -26,7 +26,6 @@ WORKDIR $HOME
 # ADD . .
 
 # For setuptools-scm to work
-COPY .git ./.git
 COPY . .
 RUN git config --global --add safe.directory /dyphan
 
