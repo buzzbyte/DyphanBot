@@ -23,7 +23,12 @@ RUN apt update && apt install -yqq --no-install-recommends \
 ENV HOME /dyphan
 WORKDIR $HOME
 
-ADD . .
+# ADD . .
+
+# For setuptools-scm to work
+COPY .git ./.git
+COPY . .
+RUN git config --global --add safe.directory /dyphan
 
 RUN pip3 install --upgrade pip && \
     pip3 install .
