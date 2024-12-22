@@ -30,6 +30,7 @@ COPY . .
 RUN git config --global --add safe.directory /dyphan
 
 RUN pip3 install --upgrade pip && \
+    pip3 install setuptools && \
     pip3 install .
 
 CMD ["python3", "-m" , "dyphanbot"]
