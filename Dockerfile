@@ -1,4 +1,4 @@
-FROM python:3.8-slim AS compile
+FROM python:3.13-slim AS compile
 LABEL maintainer="https://github.com/buzzbyte"
 
 ARG BUILD_DATE
