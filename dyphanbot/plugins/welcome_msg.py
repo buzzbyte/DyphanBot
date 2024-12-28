@@ -155,7 +155,7 @@ class WelcomeMsg(Plugin):
         if len(channels) <= 0:
             return await message.channel.send("You have not mentioned any channels.")
         if len(textblocks) <= 0:
-            return await message.channel.send("No welcome message specified. Specify one in a code block (between \``` and \```).")
+            return await message.channel.send("No welcome message specified. Specify one in a code block (between \\``` and \\```).")
         if not self.data.get(guild_id):
             self.data[guild_id] = {
                 "enabled": False,
