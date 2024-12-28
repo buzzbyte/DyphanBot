@@ -20,7 +20,7 @@ RUN apt update && apt install -yqq --no-install-recommends \
     git ffmpeg\
  && rm -rf /var/lib/apt/lists/*
 
-ENV HOME /dyphan
+ENV HOME=/dyphan
 WORKDIR $HOME
 
 # ADD . .
@@ -29,8 +29,18 @@ WORKDIR $HOME
 COPY . .
 RUN git config --global --add safe.directory /dyphan
 
+# install dyphanbot and its dependencies
 RUN pip3 install --upgrade pip && \
     pip3 install setuptools && \
     pip3 install .
+
+# install plugin dependencies
+RUN for f in /dyphan/.dyphan/plugins/*; do \
+        if [ -d "$f" ]; then \
+            if [ -f "$f/requirements.txt" ]; then \
+                pip3 install -r $f/requirements.txt; \
+            fi; \
+        fi; \
+    done
 
 CMD ["python3", "-m" , "dyphanbot"]
